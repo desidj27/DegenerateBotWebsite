@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Gamepad2, Hash, Mic, User } from "lucide-react";
 
 import type { ResolvePayload } from "@/lib/discord/types";
@@ -214,12 +215,45 @@ export function LeaderboardUserDisplay({
   );
 }
 
-export function GameDisplay({ name }: { name: string }) {
+function GameIconSlot({
+  name,
+  iconUrl,
+}: {
+  name: string;
+  iconUrl?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showImage = Boolean(iconUrl) && !failed;
+
+  if (showImage) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={iconUrl!}
+        alt=""
+        className="size-6 shrink-0 rounded-md bg-muted object-cover ring-1 ring-border"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
   return (
-    <span className={LEADER_PILL_CLASS}>
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-400">
-        <Gamepad2 className="size-3.5" />
-      </span>
+    <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-400">
+      <Gamepad2 className="size-3.5" />
+    </span>
+  );
+}
+
+export function GameDisplay({
+  name,
+  iconUrl,
+}: {
+  name: string;
+  iconUrl?: string | null;
+}) {
+  return (
+    <span className={LEADER_PILL_CLASS} title={name}>
+      <GameIconSlot name={name} iconUrl={iconUrl} />
       <span className="truncate text-sm font-medium">{name}</span>
     </span>
   );
@@ -231,12 +265,14 @@ export function DataCell({
   row,
   resolved,
   loading,
+  gameIcons,
 }: {
   column: string;
   value: unknown;
   row: Record<string, unknown>;
   resolved: ResolvePayload;
   loading?: boolean;
+  gameIcons?: Record<string, string | null>;
 }) {
   if (column === "_id") {
     return (
@@ -247,7 +283,13 @@ export function DataCell({
   }
 
   if (column === "activity_name" && value) {
-    return <GameDisplay name={String(value)} />;
+    const activityName = String(value);
+    return (
+      <GameDisplay
+        name={activityName}
+        iconUrl={gameIcons?.[activityName] ?? undefined}
+      />
+    );
   }
 
   if (column === "player_count" || column === "session_count") {

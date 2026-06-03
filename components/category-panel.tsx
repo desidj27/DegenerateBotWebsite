@@ -13,6 +13,7 @@ import { collectionSupportsTimeFilter } from "@/lib/time-filter";
 import { DataCell } from "@/components/entity-display";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
+import { useGameIcons } from "@/hooks/use-game-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,6 +105,22 @@ export function CategoryPanel({
   const { resolved, loading: resolving } = useDiscordResolve(
     isByGame ? [] : (data?.items ?? []),
   );
+
+  const activityNames = useMemo(
+    () =>
+      isByGame
+        ? [
+            ...new Set(
+              (data?.items ?? [])
+                .map((row) => String(row.activity_name ?? ""))
+                .filter(Boolean),
+            ),
+          ]
+        : [],
+    [data?.items, isByGame],
+  );
+
+  const { icons: gameIcons } = useGameIcons(activityNames);
 
   function columnLabel(col: string): string {
     if (col === "user_id") return "User";
@@ -224,6 +241,7 @@ export function CategoryPanel({
                           row={row}
                           resolved={resolved}
                           loading={resolving}
+                          gameIcons={isByGame ? gameIcons : undefined}
                         />
                       </TableCell>
                     ))}

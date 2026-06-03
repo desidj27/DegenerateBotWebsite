@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,6 +19,7 @@ import {
 } from "@/components/entity-display";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
+import { useGameIcons } from "@/hooks/use-game-icons";
 import { formatDuration, formatNumber } from "@/lib/format";
 import type { ResolvePayload } from "@/lib/discord/types";
 import { Button } from "@/components/ui/button";
@@ -228,12 +229,14 @@ function GameLeaderList({
   page,
   onPageChange,
   loading,
+  gameIcons,
 }: {
   title: string;
   entries: GameLeaderEntry[];
   page: number;
   onPageChange: (page: number) => void;
   loading: boolean;
+  gameIcons: Record<string, string | null>;
 }) {
   const pages = totalPages(entries.length);
   const visible = paginate(entries, page);
@@ -273,7 +276,10 @@ function GameLeaderList({
             <li key={entry.activity_name} className={LEADER_ITEM_CLASS}>
               <RankBadge rank={rank} />
               <div className={LEADER_ITEM_BODY_CLASS}>
-                <GameDisplay name={entry.activity_name} />
+                <GameDisplay
+                  name={entry.activity_name}
+                  iconUrl={gameIcons[entry.activity_name]}
+                />
                 <p className={LEADER_ITEM_META_CLASS}>
                   {entry.player_count}{" "}
                   {entry.player_count === 1 ? "player" : "players"}
@@ -361,6 +367,12 @@ export function LeaderboardPanel() {
 
   const { resolved, loading: resolving } = useDiscordResolve(leaderRows);
 
+  const gameNames = useMemo(
+    () => data?.games.map((g) => g.activity_name) ?? [],
+    [data?.games],
+  );
+  const { icons: gameIcons } = useGameIcons(gameNames);
+
   return (
     <Card className="overflow-hidden border-border/40 bg-card/35 shadow-xl shadow-black/25 backdrop-blur-md">
       <CardHeader className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-transparent to-transparent pb-6">
@@ -434,6 +446,7 @@ export function LeaderboardPanel() {
             page={gamesPage}
             onPageChange={setGamesPage}
             loading={loading}
+            gameIcons={gameIcons}
           />
         </div>
       </CardContent>
