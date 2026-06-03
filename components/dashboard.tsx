@@ -74,7 +74,7 @@ export function Dashboard() {
                 Activity Tracker
               </h1>
               <p className="max-w-md text-sm text-muted-foreground">
-                Messages, voice, and presence — with real names from Discord.
+                Messages, voice, and presence.
               </p>
             </div>
             <Badge
