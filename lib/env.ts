@@ -1,7 +1,11 @@
 /** Server-only env helpers (works with Vercel Environment Variables and .env.local). */
 
 export function getMongoUri(): string | undefined {
-  return process.env.MONGODB_URI?.trim();
+  const uri = process.env.MONGODB_URI?.trim();
+  if (!uri || uri.includes("<cluster>") || uri.includes("<user>")) {
+    return undefined;
+  }
+  return uri;
 }
 
 export function getMongoDbName(): string {

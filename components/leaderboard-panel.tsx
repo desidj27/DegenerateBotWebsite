@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  Calendar,
+  ChevronLeft,
+  ChevronRight,
   Crown,
+  Gamepad2,
   MessageSquare,
   Mic,
   RefreshCw,
@@ -11,11 +13,14 @@ import {
 } from "lucide-react";
 
 import type { DateRange, TimePreset } from "@/lib/dates";
-import { UserDisplay } from "@/components/entity-display";
+import {
+  GameDisplay,
+  LeaderboardUserDisplay,
+} from "@/components/entity-display";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
 import { formatDuration, formatNumber } from "@/lib/format";
 import type { ResolvePayload } from "@/lib/discord/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,29 +29,36 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-type LeaderEntry = { user_id: string; total: number };
+type UserLeaderEntry = { user_id: string; total: number };
+
+type GameLeaderEntry = {
+  activity_name: string;
+  total: number;
+  player_count: number;
+};
 
 type LeaderboardResponse = {
   range: DateRange;
   guild_id: string | null;
   limit: number;
-  messages: LeaderEntry[];
-  voice: LeaderEntry[];
+  messages: UserLeaderEntry[];
+  voice: UserLeaderEntry[];
+  games: GameLeaderEntry[];
 };
 
-const PRESETS: { value: TimePreset; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "7d", label: "7 days" },
-  { value: "30d", label: "30 days" },
-  { value: "90d", label: "90 days" },
-  { value: "all", label: "All time" },
-  { value: "custom", label: "Custom" },
-];
+const PAGE_SIZE = 10;
+
+const LEADER_ITEM_CLASS =
+  "flex h-[4.75rem] items-center gap-3 rounded-xl border border-border/50 bg-muted/15 px-3";
+
+const LEADER_ITEM_BODY_CLASS =
+  "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-1";
+
+const LEADER_ITEM_META_CLASS =
+  "h-4 truncate text-xs leading-4 text-muted-foreground";
 
 const RANK_STYLES = [
   "bg-amber-500/20 text-amber-300 ring-amber-500/40",
@@ -54,10 +66,80 @@ const RANK_STYLES = [
   "bg-orange-700/25 text-orange-200 ring-orange-600/40",
 ];
 
-function LeaderList({
+function RankBadge({ rank }: { rank: number }) {
+  const display = rank + 1;
+  return (
+    <span
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-1",
+        rank < 3
+          ? RANK_STYLES[rank]
+          : "bg-muted text-muted-foreground ring-border",
+      )}
+    >
+      {rank < 3 ? <Crown className="size-3.5" /> : display}
+    </span>
+  );
+}
+
+function ColumnPagination({
+  page,
+  totalPages,
+  totalItems,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalItems === 0) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        disabled={page <= 0}
+        onClick={() => onPageChange(page - 1)}
+        aria-label="Previous page"
+      >
+        <ChevronLeft className="size-4" />
+      </Button>
+      <span className="text-center text-xs text-muted-foreground tabular-nums">
+        {page + 1} / {totalPages}
+        <span className="hidden sm:inline"> · {totalItems} total</span>
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        disabled={page >= totalPages - 1}
+        onClick={() => onPageChange(page + 1)}
+        aria-label="Next page"
+      >
+        <ChevronRight className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+function paginate<T>(items: T[], page: number): T[] {
+  const start = page * PAGE_SIZE;
+  return items.slice(start, start + PAGE_SIZE);
+}
+
+function totalPages(count: number): number {
+  return Math.max(1, Math.ceil(count / PAGE_SIZE));
+}
+
+function UserLeaderList({
   title,
   icon: Icon,
   entries,
+  page,
+  onPageChange,
   formatValue,
   loading,
   resolved,
@@ -65,29 +147,37 @@ function LeaderList({
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
-  entries: LeaderEntry[];
+  entries: UserLeaderEntry[];
+  page: number;
+  onPageChange: (page: number) => void;
   formatValue: (n: number) => string;
   loading: boolean;
   resolved: ResolvePayload;
   resolving: boolean;
 }) {
+  const pages = totalPages(entries.length);
+  const visible = paginate(entries, page);
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-[420px] flex-col gap-3">
       <div className="flex items-center gap-2">
         <div className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
           <Icon className="size-4" />
         </div>
         <h3 className="font-medium">{title}</h3>
       </div>
-      <ul className="space-y-2">
+      <ul className="min-h-[360px] flex-1 space-y-2">
         {loading &&
-          Array.from({ length: 5 }).map((_, i) => (
+          Array.from({ length: PAGE_SIZE }).map((_, i) => (
             <li
               key={i}
-              className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5"
+              className={cn(LEADER_ITEM_CLASS, "bg-muted/20")}
             >
               <Skeleton className="size-7 rounded-full" />
-              <Skeleton className="h-4 flex-1" />
+              <div className={LEADER_ITEM_BODY_CLASS}>
+                <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
+                <Skeleton className="h-4 w-20" />
+              </div>
               <Skeleton className="h-4 w-16" />
             </li>
           ))}
@@ -97,39 +187,113 @@ function LeaderList({
           </li>
         )}
         {!loading &&
-          entries.map((entry, index) => (
-            <li
-              key={entry.user_id}
-              className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/15 px-3 py-2.5 transition-colors hover:bg-muted/30"
-            >
-              <span
-                className={cn(
-                  "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-1",
-                  index < 3
-                    ? RANK_STYLES[index]
-                    : "bg-muted text-muted-foreground ring-border",
-                )}
-              >
-                {index < 3 ? (
-                  <Crown className="size-3.5" />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <UserDisplay
+          visible.map((entry, index) => {
+            const rank = page * PAGE_SIZE + index;
+            const user = resolved.users[entry.user_id];
+            return (
+            <li key={entry.user_id} className={LEADER_ITEM_CLASS}>
+              <RankBadge rank={rank} />
+              <div className={LEADER_ITEM_BODY_CLASS}>
+                <LeaderboardUserDisplay
                   userId={entry.user_id}
                   resolved={resolved}
                   loading={resolving}
-                  compact
                 />
+                <p className={LEADER_ITEM_META_CLASS}>
+                  {user ? `@${user.username}` : "\u00a0"}
+                </p>
               </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-violet-300">
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
                 {formatValue(entry.total)}
               </span>
             </li>
-          ))}
+            );
+          })}
       </ul>
+      {!loading && (
+        <ColumnPagination
+          page={page}
+          totalPages={pages}
+          totalItems={entries.length}
+          onPageChange={onPageChange}
+        />
+      )}
+    </div>
+  );
+}
+
+function GameLeaderList({
+  title,
+  entries,
+  page,
+  onPageChange,
+  loading,
+}: {
+  title: string;
+  entries: GameLeaderEntry[];
+  page: number;
+  onPageChange: (page: number) => void;
+  loading: boolean;
+}) {
+  const pages = totalPages(entries.length);
+  const visible = paginate(entries, page);
+
+  return (
+    <div className="flex min-h-[420px] flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+          <Gamepad2 className="size-4" />
+        </div>
+        <h3 className="font-medium">{title}</h3>
+      </div>
+      <ul className="min-h-[360px] flex-1 space-y-2">
+        {loading &&
+          Array.from({ length: PAGE_SIZE }).map((_, i) => (
+            <li
+              key={i}
+              className={cn(LEADER_ITEM_CLASS, "bg-muted/20")}
+            >
+              <Skeleton className="size-7 rounded-md" />
+              <div className={LEADER_ITEM_BODY_CLASS}>
+                <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+              <Skeleton className="h-4 w-16" />
+            </li>
+          ))}
+        {!loading && entries.length === 0 && (
+          <li className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+            No game activity yet
+          </li>
+        )}
+        {!loading &&
+          visible.map((entry, index) => {
+            const rank = page * PAGE_SIZE + index;
+            return (
+            <li key={entry.activity_name} className={LEADER_ITEM_CLASS}>
+              <RankBadge rank={rank} />
+              <div className={LEADER_ITEM_BODY_CLASS}>
+                <GameDisplay name={entry.activity_name} />
+                <p className={LEADER_ITEM_META_CLASS}>
+                  {entry.player_count}{" "}
+                  {entry.player_count === 1 ? "player" : "players"}
+                </p>
+              </div>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
+                {formatDuration(entry.total)}
+              </span>
+            </li>
+            );
+          })}
+      </ul>
+      {!loading && (
+        <ColumnPagination
+          page={page}
+          totalPages={pages}
+          totalItems={entries.length}
+          onPageChange={onPageChange}
+        />
+      )}
     </div>
   );
 }
@@ -138,23 +302,24 @@ export function LeaderboardPanel() {
   const [preset, setPreset] = useState<TimePreset>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [guildId, setGuildId] = useState("");
-  const [appliedGuildId, setAppliedGuildId] = useState("");
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [messagesPage, setMessagesPage] = useState(0);
+  const [voicePage, setVoicePage] = useState(0);
+  const [gamesPage, setGamesPage] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setMessagesPage(0);
+    setVoicePage(0);
+    setGamesPage(0);
     try {
       const params = new URLSearchParams({
         preset,
-        limit: "25",
+        limit: "100",
       });
-      if (appliedGuildId.trim()) {
-        params.set("guild_id", appliedGuildId.trim());
-      }
       if (preset === "custom") {
         if (customFrom.trim()) params.set("from", customFrom.trim());
         if (customTo.trim()) params.set("to", customTo.trim());
@@ -170,40 +335,45 @@ export function LeaderboardPanel() {
     } finally {
       setLoading(false);
     }
-  }, [appliedGuildId, customFrom, customTo, preset]);
+  }, [customFrom, customTo, preset]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!data) return;
+    setMessagesPage((p) =>
+      Math.min(p, Math.max(0, totalPages(data.messages.length) - 1)),
+    );
+    setVoicePage((p) =>
+      Math.min(p, Math.max(0, totalPages(data.voice.length) - 1)),
+    );
+    setGamesPage((p) =>
+      Math.min(p, Math.max(0, totalPages(data.games.length) - 1)),
+    );
+  }, [data]);
+
   const leaderRows = [
     ...(data?.messages ?? []),
     ...(data?.voice ?? []),
-  ].map((e) => ({
-    user_id: e.user_id,
-    ...(appliedGuildId.trim()
-      ? { guild_id: appliedGuildId.trim() }
-      : data?.guild_id
-        ? { guild_id: data.guild_id }
-        : {}),
-  }));
+  ].map((e) => ({ user_id: e.user_id }));
 
-  const { resolved, loading: resolving } = useDiscordResolve(
-    leaderRows,
-    appliedGuildId.trim() || data?.guild_id || undefined,
-  );
+  const { resolved, loading: resolving } = useDiscordResolve(leaderRows);
 
   return (
-    <Card className="overflow-hidden border-violet-500/20 bg-card/40 shadow-xl shadow-violet-950/20 backdrop-blur-md">
-      <CardHeader className="border-b border-border/50 bg-gradient-to-r from-violet-600/10 via-transparent to-fuchsia-600/10 pb-6">
+    <Card className="overflow-hidden border-border/40 bg-card/35 shadow-xl shadow-black/25 backdrop-blur-md">
+      <CardHeader className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-transparent to-transparent pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Trophy className="size-5 text-amber-400" />
-              <CardTitle className="text-xl">Leaderboards</CardTitle>
+              <CardTitle className="font-display text-xl font-semibold">
+                Rankings
+              </CardTitle>
             </div>
             <CardDescription>
-              Top members by messages and voice time
+              Members for messages & voice · games ranked by play time
               {data?.range.label ? ` · ${data.range.label}` : ""}
             </CardDescription>
           </div>
@@ -213,68 +383,19 @@ export function LeaderboardPanel() {
           </Button>
         </div>
 
-        <div className="flex flex-col gap-4 pt-2">
-          <div className="flex flex-wrap gap-2">
-            {PRESETS.map((p) => (
-              <Button
-                key={p.value}
-                size="sm"
-                variant={preset === p.value ? "default" : "outline"}
-                className={cn(
-                  preset === p.value &&
-                    "bg-violet-600 hover:bg-violet-600/90 text-white",
-                )}
-                onClick={() => setPreset(p.value)}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
-
-          {preset === "custom" && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">From</Label>
-                <Input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">To</Label>
-                <Input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex-1 space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                Server ID (optional — improves nicknames)
-              </Label>
-              <Input
-                placeholder="Discord server ID"
-                value={guildId}
-                onChange={(e) => setGuildId(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") setAppliedGuildId(guildId);
-                }}
-              />
-            </div>
-            <Button
-              onClick={() => setAppliedGuildId(guildId)}
-              className="bg-violet-600 hover:bg-violet-600/90"
-            >
-              <Calendar className="size-4" />
-              Apply
-            </Button>
-          </div>
-        </div>
+        <TimeRangeFilter
+          preset={preset}
+          onPresetChange={(next) => {
+            setPreset(next);
+            setMessagesPage(0);
+            setVoicePage(0);
+            setGamesPage(0);
+          }}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+        />
       </CardHeader>
 
       <CardContent className="pt-6">
@@ -284,35 +405,35 @@ export function LeaderboardPanel() {
           </p>
         )}
 
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Badge variant="secondary" className="gap-1">
-            <MessageSquare className="size-3" />
-            {data?.messages.length ?? 0} ranked
-          </Badge>
-          <Badge variant="secondary" className="gap-1">
-            <Mic className="size-3" />
-            {data?.voice.length ?? 0} ranked
-          </Badge>
-        </div>
-
-        <div className="grid gap-8 lg:grid-cols-2">
-          <LeaderList
+        <div className="grid gap-8 lg:grid-cols-3">
+          <UserLeaderList
             title="Messages"
             icon={MessageSquare}
             entries={data?.messages ?? []}
+            page={messagesPage}
+            onPageChange={setMessagesPage}
             formatValue={formatNumber}
             loading={loading}
             resolved={resolved}
             resolving={resolving}
           />
-          <LeaderList
+          <UserLeaderList
             title="Voice time"
             icon={Mic}
             entries={data?.voice ?? []}
+            page={voicePage}
+            onPageChange={setVoicePage}
             formatValue={formatDuration}
             loading={loading}
             resolved={resolved}
             resolving={resolving}
+          />
+          <GameLeaderList
+            title="Games"
+            entries={data?.games ?? []}
+            page={gamesPage}
+            onPageChange={setGamesPage}
+            loading={loading}
           />
         </div>
       </CardContent>

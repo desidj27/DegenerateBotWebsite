@@ -1,9 +1,9 @@
 "use client";
 
-import { Hash, Mic, User } from "lucide-react";
+import { Gamepad2, Hash, Mic, User } from "lucide-react";
 
 import type { ResolvePayload } from "@/lib/discord/types";
-import { formatCell, shortenId } from "@/lib/format";
+import { formatCell, formatNumber, shortenId } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -84,15 +84,16 @@ export function ChannelDisplay({
   loading?: boolean;
 }) {
   const channel = resolved.channels[channelId];
+  const isVoice = channel?.type === 2 || channel?.type === 13;
 
   if (loading && !channel) {
-    return <Skeleton className="h-4 w-28" />;
+    return <Skeleton className="h-8 w-36 rounded-lg" />;
   }
 
   if (!channel) {
     return (
       <span
-        className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground"
+        className="inline-flex items-center gap-1.5 rounded-lg bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground"
         title={channelId}
       >
         <Mic className="size-3.5" />
@@ -101,13 +102,25 @@ export function ChannelDisplay({
     );
   }
 
+  const Icon = isVoice ? Mic : Hash;
+
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-sm"
+      className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-muted/25 px-2.5 py-1.5"
       title={channelId}
     >
-      <Mic className="size-3.5 shrink-0 text-violet-400" />
-      <span className="truncate font-medium">{channel.name}</span>
+      <span
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded-md",
+          isVoice ? "bg-sky-500/15 text-sky-400" : "bg-muted text-muted-foreground",
+        )}
+      >
+        <Icon className="size-3.5" />
+      </span>
+      <span className="min-w-0 truncate text-sm font-medium">
+        {!isVoice && !channel.name.startsWith("#") ? "#" : ""}
+        {channel.name}
+      </span>
     </span>
   );
 }
@@ -157,6 +170,61 @@ export function GuildDisplay({
   );
 }
 
+const LEADER_PILL_CLASS =
+  "inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-muted/25 px-2.5 py-1.5";
+
+export function LeaderboardUserDisplay({
+  userId,
+  resolved,
+  loading,
+}: {
+  userId: string;
+  resolved: ResolvePayload;
+  loading?: boolean;
+}) {
+  const user = resolved.users[userId];
+
+  if (loading && !user) {
+    return <Skeleton className={cn(LEADER_PILL_CLASS, "h-[2.25rem] w-full max-w-xs")} />;
+  }
+
+  if (!user) {
+    return (
+      <span className={LEADER_PILL_CLASS} title={userId}>
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <User className="size-3.5" />
+        </span>
+        <span className="truncate font-mono text-sm font-medium">
+          {shortenId(userId, 10)}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className={LEADER_PILL_CLASS} title={`${user.displayName} (${userId})`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={user.avatarUrl}
+        alt=""
+        className="size-6 shrink-0 rounded-md bg-muted object-cover ring-1 ring-border"
+      />
+      <span className="truncate text-sm font-medium">{user.displayName}</span>
+    </span>
+  );
+}
+
+export function GameDisplay({ name }: { name: string }) {
+  return (
+    <span className={LEADER_PILL_CLASS}>
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-400">
+        <Gamepad2 className="size-3.5" />
+      </span>
+      <span className="truncate text-sm font-medium">{name}</span>
+    </span>
+  );
+}
+
 export function DataCell({
   column,
   value,
@@ -178,8 +246,20 @@ export function DataCell({
     );
   }
 
+  if (column === "activity_name" && value) {
+    return <GameDisplay name={String(value)} />;
+  }
+
+  if (column === "player_count" || column === "session_count") {
+    const n = Number(value ?? 0);
+    return (
+      <span className="tabular-nums text-sm">
+        {n > 0 ? formatNumber(n) : "—"}
+      </span>
+    );
+  }
+
   if (column === "user_id" && value) {
-    const guildId = row.guild_id ? String(row.guild_id) : undefined;
     return (
       <UserDisplay
         userId={String(value)}

@@ -6,7 +6,11 @@ import {
   isCollectionKey,
   TRACKED_COLLECTIONS,
 } from "@/lib/collections";
+import { resolveDateRange, type TimePreset } from "@/lib/dates";
+import { fetchGameActivityTable } from "@/lib/activity-by-game";
 import { getDb } from "@/lib/mongodb";
+import { buildTimeRangeFilter } from "@/lib/time-filter";
+import { toClientMongoError } from "@/lib/mongo-errors";
 import { serializeDocument } from "@/lib/serialize";
 
 const MAX_LIMIT = 2000;
@@ -43,10 +47,49 @@ export async function GET(request: NextRequest) {
       filterParams[key] = searchParams.get(key) ?? undefined;
     }
 
-    const filter = buildMongoFilter(collectionParam, filterParams);
+    const presetParam = searchParams.get("preset") as TimePreset | null;
+    const range = resolveDateRange(
+      presetParam ?? "all",
+      searchParams.get("from") ?? undefined,
+      searchParams.get("to") ?? undefined,
+    );
+
     const db = await getDb();
+    const config = TRACKED_COLLECTIONS[collectionParam];
+
+    if (
+      config.groupByGame &&
+      (collectionParam === "activity_totals" ||
+        collectionParam === "activity_sessions")
+    ) {
+      const { total, items } = await fetchGameActivityTable(
+        db,
+        collectionParam,
+        {
+          range,
+          activityName: filterParams.activity_name,
+          limit,
+        },
+      );
+
+      return NextResponse.json({
+        collection: collectionParam,
+        range,
+        view: "by_game",
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        items,
+      });
+    }
+
+    const filter = {
+      ...buildMongoFilter(collectionParam, filterParams),
+      ...buildTimeRangeFilter(collectionParam, range),
+    };
     const col = db.collection(collectionParam);
-    const sort = TRACKED_COLLECTIONS[collectionParam].defaultSort;
+    const sort = config.defaultSort;
 
     const [total, docs] = await Promise.all([
       col.countDocuments(filter),
@@ -60,6 +103,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       collection: collectionParam,
+      range,
       filter,
       page,
       limit,
@@ -71,8 +115,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("GET /api/data", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to load tracked data";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: toClientMongoError(error) },
+      { status: 500 },
+    );
   }
 }

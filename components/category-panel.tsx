@@ -1,14 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Filter, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import {
-  FILTER_LABELS,
   type CollectionKey,
+  getDisplayColumns,
   TRACKED_COLLECTIONS,
 } from "@/lib/collections";
+import { resolveDateRange, type TimePreset } from "@/lib/dates";
+import { collectionSupportsTimeFilter } from "@/lib/time-filter";
 import { DataCell } from "@/components/entity-display";
+import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,9 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { UserSelect } from "@/components/user-select";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -39,33 +39,32 @@ type DataResponse = {
   items: Record<string, unknown>[];
 };
 
-function emptyFilters(collection: CollectionKey): Record<string, string> {
-  const filters: Record<string, string> = {};
-  for (const key of TRACKED_COLLECTIONS[collection].filters) {
-    filters[key] = "";
-  }
-  return filters;
-}
-
 export function CategoryPanel({
   collection,
   docCount,
-  globalUserId = "",
 }: {
   collection: CollectionKey;
   docCount?: number;
-  globalUserId?: string;
 }) {
   const config = TRACKED_COLLECTIONS[collection];
-  const [draftFilters, setDraftFilters] = useState(emptyFilters(collection));
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters(collection));
+  const hasTimeFilter = collectionSupportsTimeFilter(collection);
+  const [preset, setPreset] = useState<TimePreset>("7d");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<DataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const range = useMemo(
+    () => resolveDateRange(preset, customFrom, customTo),
+    [preset, customFrom, customTo],
+  );
+
+  const isByGame = Boolean(config.groupByGame);
+
   const columns = useMemo(
-    () => ["_id", ...config.fields],
-    [config.fields],
+    () => getDisplayColumns(collection),
+    [collection],
   );
 
   const load = useCallback(async () => {
@@ -76,17 +75,11 @@ export function CategoryPanel({
         collection,
         limit: "all",
         page: "1",
+        preset: hasTimeFilter ? preset : "all",
       });
-      const filters = { ...appliedFilters };
-      if (
-        globalUserId.trim() &&
-        TRACKED_COLLECTIONS[collection].filters.includes("user_id")
-      ) {
-        filters.user_id = globalUserId.trim();
-      }
-
-      for (const [key, value] of Object.entries(filters)) {
-        if (value.trim()) params.set(key, value.trim());
+      if (hasTimeFilter && preset === "custom") {
+        if (customFrom.trim()) params.set("from", customFrom.trim());
+        if (customTo.trim()) params.set("to", customTo.trim());
       }
 
       const res = await fetch(`/api/data?${params}`);
@@ -99,49 +92,49 @@ export function CategoryPanel({
     } finally {
       setLoading(false);
     }
-  }, [appliedFilters, collection, globalUserId]);
+  }, [collection, customFrom, customTo, hasTimeFilter, preset]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  function applyFilters() {
-    setAppliedFilters({ ...draftFilters });
-  }
-
-  function clearFilters() {
-    const empty = emptyFilters(collection);
-    setDraftFilters(empty);
-    setAppliedFilters(empty);
-  }
-
   const showing = data?.items.length ?? 0;
   const total = data?.total ?? docCount ?? 0;
 
-  const preferredGuildId = appliedFilters.guild_id?.trim() || undefined;
   const { resolved, loading: resolving } = useDiscordResolve(
-    data?.items ?? [],
-    preferredGuildId,
+    isByGame ? [] : (data?.items ?? []),
   );
 
   function columnLabel(col: string): string {
     if (col === "user_id") return "User";
-    if (col === "channel_id") return "Voice channel";
-    if (col === "guild_id") return "Server";
-    if (col === "_id") return "ID";
+    if (col === "channel_id") return "Channel";
+    if (col === "activity_name") return "Game";
+    if (col === "player_count") return "Players";
+    if (col === "session_count") return "Sessions";
+    if (col === "total_seconds") return "Play time";
     return col.replace(/_/g, " ");
   }
 
   return (
     <Card
       id={collection}
-      className="scroll-mt-24 border-border/60 bg-card/50 backdrop-blur-sm"
+      className="scroll-mt-28 border-border/40 bg-card/30 shadow-lg shadow-black/20 backdrop-blur-md"
     >
       <CardHeader className="gap-4 border-b border-border/40 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-lg">{config.label}</CardTitle>
-            <CardDescription>{config.description}</CardDescription>
+          <div className="space-y-1">
+            <CardTitle className="font-display text-lg font-semibold">
+              {config.label}
+            </CardTitle>
+            <CardDescription>
+              {config.description}
+              {hasTimeFilter && (
+                <span className="text-muted-foreground/80">
+                  {" "}
+                  · {range.label}
+                </span>
+              )}
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="tabular-nums">
@@ -156,64 +149,20 @@ export function CategoryPanel({
           </div>
         </div>
 
-        {config.filters.length > 0 && (
-          <div className="flex flex-col gap-3">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {config.filters.map((key) => {
-                if (key === "user_id") {
-                  if (globalUserId.trim()) return null;
-                  return (
-                    <UserSelect
-                      key={key}
-                      label="User"
-                      value={draftFilters.user_id ?? ""}
-                      onChange={(id) =>
-                        setDraftFilters((prev) => ({ ...prev, user_id: id }))
-                      }
-                      guildId={draftFilters.guild_id?.trim() || undefined}
-                      placeholder="Select a user…"
-                    />
-                  );
-                }
-
-                return (
-                  <div key={key} className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">
-                      {FILTER_LABELS[key] ?? key}
-                    </Label>
-                    <Input
-                      className="h-8 bg-background/60"
-                      placeholder={FILTER_LABELS[key] ?? key}
-                      value={draftFilters[key] ?? ""}
-                      onChange={(e) =>
-                        setDraftFilters((prev) => ({
-                          ...prev,
-                          [key]: e.target.value,
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") applyFilters();
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={applyFilters}
-                className="gap-1.5"
-              >
-                <Filter className="size-3.5" />
-                Apply filters
-              </Button>
-              <Button size="sm" variant="ghost" onClick={clearFilters}>
-                Clear
-              </Button>
-            </div>
-          </div>
+        {hasTimeFilter ? (
+          <TimeRangeFilter
+            preset={preset}
+            onPresetChange={setPreset}
+            customFrom={customFrom}
+            customTo={customTo}
+            onCustomFromChange={setCustomFrom}
+            onCustomToChange={setCustomTo}
+            compact
+          />
+        ) : (
+          <Badge variant="secondary" className="w-fit rounded-full">
+            All time · no date on this data
+          </Badge>
         )}
       </CardHeader>
 
@@ -256,7 +205,7 @@ export function CategoryPanel({
                     colSpan={columns.length}
                     className="h-20 text-center text-muted-foreground"
                   >
-                    No matching records
+                    No records in this period
                   </TableCell>
                 </TableRow>
               )}

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { fetchGameActivityLeaderboard } from "@/lib/activity-by-game";
 import { dayFilterQuery, resolveDateRange, type TimePreset } from "@/lib/dates";
 import { getDb } from "@/lib/mongodb";
+import { toClientMongoError } from "@/lib/mongo-errors";
 
 const PRESETS = new Set<TimePreset>([
   "today",
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const col = db.collection("user_daily");
 
-    const [messageLeaders, voiceLeaders] = await Promise.all([
+    const [messageLeaders, voiceLeaders, games] = await Promise.all([
       col
         .aggregate<{ user_id: string; total: number }>([
           { $match: match },
@@ -68,7 +70,14 @@ export async function GET(request: NextRequest) {
           { $project: { _id: 0, user_id: "$_id", total: 1 } },
         ])
         .toArray(),
+      fetchGameActivityLeaderboard(db, { guildId, limit }),
     ]);
+
+    const gameLeaders = games.map((row) => ({
+      activity_name: row.activity_name,
+      total: row.total_seconds,
+      player_count: row.player_count,
+    }));
 
     return NextResponse.json({
       range,
@@ -76,11 +85,12 @@ export async function GET(request: NextRequest) {
       limit,
       messages: messageLeaders,
       voice: voiceLeaders,
+      games: gameLeaders,
     });
   } catch (error) {
     console.error("GET /api/leaderboard", error);
     return NextResponse.json(
-      { error: "Failed to load leaderboard" },
+      { error: toClientMongoError(error) },
       { status: 500 },
     );
   }
