@@ -71,9 +71,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("GET /api/data", error);
-    return NextResponse.json(
-      { error: "Failed to load tracked data" },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Failed to load tracked data";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { UserSelect } from "@/components/user-select";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,9 +50,11 @@ function emptyFilters(collection: CollectionKey): Record<string, string> {
 export function CategoryPanel({
   collection,
   docCount,
+  globalUserId = "",
 }: {
   collection: CollectionKey;
   docCount?: number;
+  globalUserId?: string;
 }) {
   const config = TRACKED_COLLECTIONS[collection];
   const [draftFilters, setDraftFilters] = useState(emptyFilters(collection));
@@ -74,7 +77,15 @@ export function CategoryPanel({
         limit: "all",
         page: "1",
       });
-      for (const [key, value] of Object.entries(appliedFilters)) {
+      const filters = { ...appliedFilters };
+      if (
+        globalUserId.trim() &&
+        TRACKED_COLLECTIONS[collection].filters.includes("user_id")
+      ) {
+        filters.user_id = globalUserId.trim();
+      }
+
+      for (const [key, value] of Object.entries(filters)) {
         if (value.trim()) params.set(key, value.trim());
       }
 
@@ -88,7 +99,7 @@ export function CategoryPanel({
     } finally {
       setLoading(false);
     }
-  }, [appliedFilters, collection]);
+  }, [appliedFilters, collection, globalUserId]);
 
   useEffect(() => {
     load();
@@ -148,27 +159,45 @@ export function CategoryPanel({
         {config.filters.length > 0 && (
           <div className="flex flex-col gap-3">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {config.filters.map((key) => (
-                <div key={key} className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">
-                    {FILTER_LABELS[key] ?? key}
-                  </Label>
-                  <Input
-                    className="h-8 bg-background/60"
-                    placeholder={FILTER_LABELS[key] ?? key}
-                    value={draftFilters[key] ?? ""}
-                    onChange={(e) =>
-                      setDraftFilters((prev) => ({
-                        ...prev,
-                        [key]: e.target.value,
-                      }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") applyFilters();
-                    }}
-                  />
-                </div>
-              ))}
+              {config.filters.map((key) => {
+                if (key === "user_id") {
+                  if (globalUserId.trim()) return null;
+                  return (
+                    <UserSelect
+                      key={key}
+                      label="User"
+                      value={draftFilters.user_id ?? ""}
+                      onChange={(id) =>
+                        setDraftFilters((prev) => ({ ...prev, user_id: id }))
+                      }
+                      guildId={draftFilters.guild_id?.trim() || undefined}
+                      placeholder="Select a user…"
+                    />
+                  );
+                }
+
+                return (
+                  <div key={key} className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
+                      {FILTER_LABELS[key] ?? key}
+                    </Label>
+                    <Input
+                      className="h-8 bg-background/60"
+                      placeholder={FILTER_LABELS[key] ?? key}
+                      value={draftFilters[key] ?? ""}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") applyFilters();
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
             <div className="flex gap-2">
               <Button

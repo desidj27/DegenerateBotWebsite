@@ -18,8 +18,19 @@ import {
 import { CategoryPanel } from "@/components/category-panel";
 import { EnvSetupBanner } from "@/components/discord-setup-banner";
 import { LeaderboardPanel } from "@/components/leaderboard-panel";
+import { UserSelect } from "@/components/user-select";
+import { useUserDirectory } from "@/hooks/use-user-directory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 type CollectionMeta = {
@@ -35,6 +46,11 @@ const NAV = [
 export function Dashboard() {
   const [meta, setMeta] = useState<CollectionMeta[]>([]);
   const [activeSection, setActiveSection] = useState<string>("leaderboard");
+  const [globalUserId, setGlobalUserId] = useState("");
+  const [userListGuildId, setUserListGuildId] = useState("");
+  const { users, loading: usersLoading } = useUserDirectory(
+    userListGuildId.trim() || undefined,
+  );
 
   const loadMeta = useCallback(async () => {
     try {
@@ -154,6 +170,39 @@ export function Dashboard() {
             </p>
           </div>
 
+          <Card className="border-violet-500/20 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Filter by user</CardTitle>
+              <CardDescription>
+                Pick a member to show only their stats across all categories
+                below.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <UserSelect
+                className="sm:col-span-2 lg:col-span-2"
+                label="User"
+                value={globalUserId}
+                onChange={setGlobalUserId}
+                guildId={userListGuildId.trim() || undefined}
+                users={users}
+                loading={usersLoading}
+                placeholder="All users — click to select…"
+              />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">
+                  Server ID (optional)
+                </Label>
+                <Input
+                  className="h-9 bg-background/60"
+                  placeholder="Narrows the user list"
+                  value={userListGuildId}
+                  onChange={(e) => setUserListGuildId(e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {COLLECTION_GROUPS.map((group) => (
             <div key={group.title} className="space-y-4">
               <h3 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
@@ -165,6 +214,7 @@ export function Dashboard() {
                     key={key}
                     collection={key}
                     docCount={meta.find((m) => m.key === key)?.count}
+                    globalUserId={globalUserId}
                   />
                 ))}
               </div>

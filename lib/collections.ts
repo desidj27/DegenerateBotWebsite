@@ -100,7 +100,7 @@ export const COLLECTION_GROUPS: {
 export const FILTER_LABELS: Record<string, string> = {
   day: "Day",
   guild_id: "Guild ID",
-  user_id: "User ID",
+  user_id: "User",
   channel_id: "Channel ID",
   activity_name: "Activity",
 };
