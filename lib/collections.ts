@@ -79,6 +79,32 @@ export const COLLECTION_KEYS = Object.keys(
   TRACKED_COLLECTIONS,
 ) as CollectionKey[];
 
+export const COLLECTION_GROUPS: {
+  title: string;
+  keys: CollectionKey[];
+}[] = [
+  {
+    title: "Daily stats",
+    keys: ["user_daily", "channel_daily"],
+  },
+  {
+    title: "Sessions",
+    keys: ["activity_sessions", "voice_sessions"],
+  },
+  {
+    title: "Totals & events",
+    keys: ["activity_totals", "member_joins", "economy_balances", "boost_events"],
+  },
+];
+
+export const FILTER_LABELS: Record<string, string> = {
+  day: "Day",
+  guild_id: "Guild ID",
+  user_id: "User ID",
+  channel_id: "Channel ID",
+  activity_name: "Activity",
+};
+
 export function isCollectionKey(value: string): value is CollectionKey {
   return value in TRACKED_COLLECTIONS;
 }

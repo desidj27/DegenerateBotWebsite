@@ -9,8 +9,8 @@ import {
 import { getDb } from "@/lib/mongodb";
 import { serializeDocument } from "@/lib/serialize";
 
-const MAX_LIMIT = 100;
-const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 2000;
+const DEFAULT_LIMIT = 2000;
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,10 +25,17 @@ export async function GET(request: NextRequest) {
     }
 
     const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
-    const limit = Math.min(
-      MAX_LIMIT,
-      Math.max(1, Number(searchParams.get("limit") ?? String(DEFAULT_LIMIT)) || DEFAULT_LIMIT),
-    );
+    const limitParam = searchParams.get("limit");
+    const limit =
+      limitParam === "all"
+        ? MAX_LIMIT
+        : Math.min(
+            MAX_LIMIT,
+            Math.max(
+              1,
+              Number(limitParam ?? String(DEFAULT_LIMIT)) || DEFAULT_LIMIT,
+            ),
+          );
     const skip = (page - 1) * limit;
 
     const filterParams: Record<string, string | undefined> = {};
