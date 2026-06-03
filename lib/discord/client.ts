@@ -4,6 +4,7 @@ import type {
   ResolvedGuild,
   ResolvedUser,
 } from "@/lib/discord/types";
+import { getDiscordBotToken } from "@/lib/env";
 
 const API = "https://discord.com/api/v10";
 
@@ -32,7 +33,7 @@ type DiscordGuild = {
 };
 
 function botToken(): string | undefined {
-  return process.env.DISCORD_BOT_TOKEN?.trim();
+  return getDiscordBotToken();
 }
 
 export function isDiscordConfigured(): boolean {

@@ -1,7 +1,8 @@
 import { MongoClient, type Db } from "mongodb";
 
-const uri = process.env.MONGODB_URI;
-const dbName = process.env.MONGODB_DB ?? "degeneratebot";
+import { getMongoDbName, getMongoUri } from "@/lib/env";
+
+const dbName = getMongoDbName();
 
 declare global {
   // eslint-disable-next-line no-var
@@ -9,20 +10,18 @@ declare global {
 }
 
 function getClientPromise(): Promise<MongoClient> {
+  const uri = getMongoUri();
   if (!uri) {
-    throw new Error("MONGODB_URI is not set");
+    throw new Error(
+      "MONGODB_URI is not set. Add it in Vercel → Project → Settings → Environment Variables, then redeploy.",
+    );
   }
 
-  if (process.env.NODE_ENV === "development") {
-    if (!global._mongoClientPromise) {
-      const client = new MongoClient(uri);
-      global._mongoClientPromise = client.connect();
-    }
-    return global._mongoClientPromise;
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri);
+    global._mongoClientPromise = client.connect();
   }
-
-  const client = new MongoClient(uri);
-  return client.connect();
+  return global._mongoClientPromise;
 }
 
 export async function getDb(): Promise<Db> {

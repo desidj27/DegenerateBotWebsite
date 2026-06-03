@@ -16,7 +16,7 @@ import {
   TRACKED_COLLECTIONS,
 } from "@/lib/collections";
 import { CategoryPanel } from "@/components/category-panel";
-import { DiscordSetupBanner } from "@/components/discord-setup-banner";
+import { EnvSetupBanner } from "@/components/discord-setup-banner";
 import { LeaderboardPanel } from "@/components/leaderboard-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -134,7 +134,7 @@ export function Dashboard() {
         </nav>
       </header>
 
-      <DiscordSetupBanner />
+      <EnvSetupBanner />
 
       <main className="mx-auto max-w-7xl space-y-10 px-4 py-8 md:px-8 md:py-12">
         <section id="leaderboard" className="scroll-mt-28 space-y-4">
