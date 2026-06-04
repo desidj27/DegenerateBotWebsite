@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
   ChevronLeft,
   ChevronRight,
   Crown,
@@ -9,19 +11,26 @@ import {
   MessageSquare,
   Mic,
   RefreshCw,
-  Trophy,
 } from "lucide-react";
 
 import type { DateRange, TimePreset } from "@/lib/dates";
 import {
-  GameDisplay,
+  GameIcon,
   LeaderboardUserDisplay,
 } from "@/components/entity-display";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
 import { useGameIcons } from "@/hooks/use-game-icons";
-import { formatDuration, formatNumber } from "@/lib/format";
+import { formatDuration, formatNumber, shortenId } from "@/lib/format";
+import {
+  sortByNumber,
+  sortOrderLabel,
+  toggleSortOrder,
+  type SortOrder,
+} from "@/lib/sort";
 import type { ResolvePayload } from "@/lib/discord/types";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,6 +39,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -52,34 +76,31 @@ type LeaderboardResponse = {
 
 const PAGE_SIZE = 10;
 
-const LEADER_ITEM_CLASS =
-  "flex h-[4.75rem] items-center gap-3 rounded-xl border border-border/50 bg-muted/15 px-3";
-
-const LEADER_ITEM_BODY_CLASS =
-  "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-1";
-
-const LEADER_ITEM_META_CLASS =
-  "h-4 truncate text-xs leading-4 text-muted-foreground";
-
-const RANK_STYLES = [
-  "bg-amber-500/20 text-amber-300 ring-amber-500/40",
-  "bg-zinc-400/20 text-zinc-200 ring-zinc-400/30",
-  "bg-orange-700/25 text-orange-200 ring-orange-600/40",
-];
+const RANK_CROWN_STYLES = [
+  "border-amber-500/50 bg-amber-500/20 text-amber-300 [&>svg]:text-amber-300",
+  "border-zinc-400/50 bg-zinc-400/20 text-zinc-200 [&>svg]:text-zinc-200",
+  "border-orange-600/50 bg-orange-700/25 text-orange-200 [&>svg]:text-orange-300",
+] as const;
 
 function RankBadge({ rank }: { rank: number }) {
   const display = rank + 1;
+  if (rank < 3) {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(
+          "size-7 rounded-full border p-0 [&>svg]:size-3.5",
+          RANK_CROWN_STYLES[rank],
+        )}
+      >
+        <Crown />
+      </Badge>
+    );
+  }
   return (
-    <span
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-1",
-        rank < 3
-          ? RANK_STYLES[rank]
-          : "bg-muted text-muted-foreground ring-border",
-      )}
-    >
-      {rank < 3 ? <Crown className="size-3.5" /> : display}
-    </span>
+    <Badge variant="outline" className="size-7 rounded-full p-0 tabular-nums">
+      {display}
+    </Badge>
   );
 }
 
@@ -97,7 +118,7 @@ function ColumnPagination({
   if (totalItems === 0) return null;
 
   return (
-    <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
+    <div className="flex items-center justify-between gap-2 pt-2">
       <Button
         type="button"
         variant="outline"
@@ -135,12 +156,25 @@ function totalPages(count: number): number {
   return Math.max(1, Math.ceil(count / PAGE_SIZE));
 }
 
+function ListEmpty({ message }: { message: string }) {
+  return (
+    <Empty className="min-h-32 border border-dashed">
+      <EmptyHeader>
+        <EmptyTitle>{message}</EmptyTitle>
+        <EmptyDescription>Try a different time range.</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  );
+}
+
 function UserLeaderList({
   title,
   icon: Icon,
   entries,
   page,
   onPageChange,
+  sortOrder,
+  onSortOrderChange,
   formatValue,
   loading,
   resolved,
@@ -151,71 +185,105 @@ function UserLeaderList({
   entries: UserLeaderEntry[];
   page: number;
   onPageChange: (page: number) => void;
+  sortOrder: SortOrder;
+  onSortOrderChange: (order: SortOrder) => void;
   formatValue: (n: number) => string;
   loading: boolean;
   resolved: ResolvePayload;
   resolving: boolean;
 }) {
-  const pages = totalPages(entries.length);
-  const visible = paginate(entries, page);
+  const sorted = useMemo(
+    () => sortByNumber(entries, (e) => e.total, sortOrder),
+    [entries, sortOrder],
+  );
+  const pages = totalPages(sorted.length);
+  const visible = paginate(sorted, page);
 
   return (
-    <div className="flex min-h-[420px] flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-          <Icon className="size-4" />
+    <div className="flex min-h-[420px] flex-col gap-3 pe-1 sm:pe-2">
+      <div className="flex items-center justify-between gap-2 pe-0.5">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="size-8 rounded-md p-0">
+            <Icon className="size-4" />
+          </Badge>
+          <h3 className="font-medium">{title}</h3>
         </div>
-        <h3 className="font-medium">{title}</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => onSortOrderChange(toggleSortOrder(sortOrder))}
+        >
+          {sortOrder === "desc" ? (
+            <ArrowDownWideNarrow className="size-3.5" />
+          ) : (
+            <ArrowUpWideNarrow className="size-3.5" />
+          )}
+          {sortOrderLabel(sortOrder)}
+        </Button>
       </div>
-      <ul className="min-h-[360px] flex-1 space-y-2">
+
+      <ItemGroup className="min-h-[360px] flex-1 gap-2">
         {loading &&
           Array.from({ length: PAGE_SIZE }).map((_, i) => (
-            <li
-              key={i}
-              className={cn(LEADER_ITEM_CLASS, "bg-muted/20")}
-            >
+            <Item key={i} variant="outline" className="h-[4.75rem]">
               <Skeleton className="size-7 rounded-full" />
-              <div className={LEADER_ITEM_BODY_CLASS}>
+              <div className="flex flex-1 flex-col gap-1">
                 <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
                 <Skeleton className="h-4 w-20" />
               </div>
               <Skeleton className="h-4 w-16" />
-            </li>
+            </Item>
           ))}
-        {!loading && entries.length === 0 && (
-          <li className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
-            No activity in this period
-          </li>
+
+        {!loading && sorted.length === 0 && (
+          <ListEmpty message="No activity in this period" />
         )}
+
         {!loading &&
           visible.map((entry, index) => {
             const rank = page * PAGE_SIZE + index;
             const user = resolved.users[entry.user_id];
             return (
-            <li key={entry.user_id} className={LEADER_ITEM_CLASS}>
-              <RankBadge rank={rank} />
-              <div className={LEADER_ITEM_BODY_CLASS}>
-                <LeaderboardUserDisplay
-                  userId={entry.user_id}
-                  resolved={resolved}
-                  loading={resolving}
-                />
-                <p className={LEADER_ITEM_META_CLASS}>
-                  {user ? `@${user.username}` : "\u00a0"}
-                </p>
-              </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
-                {formatValue(entry.total)}
-              </span>
-            </li>
+              <Item
+                key={entry.user_id}
+                variant="outline"
+                className="min-h-[4.75rem] items-center py-3"
+              >
+                <ItemMedia variant="icon" className="self-center">
+                  <RankBadge rank={rank} />
+                </ItemMedia>
+                <ItemMedia variant="image" className="self-center">
+                  <LeaderboardUserDisplay
+                    userId={entry.user_id}
+                    resolved={resolved}
+                    loading={resolving}
+                  />
+                </ItemMedia>
+                <ItemContent className="min-w-0 justify-center">
+                  <ItemTitle className="line-clamp-none w-full">
+                    {user?.displayName ?? shortenId(entry.user_id, 10)}
+                  </ItemTitle>
+                  <ItemDescription>
+                    {user ? `@${user.username}` : "\u00a0"}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions className="shrink-0 pe-1">
+                  <span className="text-sm font-semibold tabular-nums text-primary">
+                    {formatValue(entry.total)}
+                  </span>
+                </ItemActions>
+              </Item>
             );
           })}
-      </ul>
+      </ItemGroup>
+
       {!loading && (
         <ColumnPagination
           page={page}
           totalPages={pages}
-          totalItems={entries.length}
+          totalItems={sorted.length}
           onPageChange={onPageChange}
         />
       )}
@@ -228,6 +296,8 @@ function GameLeaderList({
   entries,
   page,
   onPageChange,
+  sortOrder,
+  onSortOrderChange,
   loading,
   gameIcons,
 }: {
@@ -235,68 +305,102 @@ function GameLeaderList({
   entries: GameLeaderEntry[];
   page: number;
   onPageChange: (page: number) => void;
+  sortOrder: SortOrder;
+  onSortOrderChange: (order: SortOrder) => void;
   loading: boolean;
   gameIcons: Record<string, string | null>;
 }) {
-  const pages = totalPages(entries.length);
-  const visible = paginate(entries, page);
+  const sorted = useMemo(
+    () => sortByNumber(entries, (e) => e.total, sortOrder),
+    [entries, sortOrder],
+  );
+  const pages = totalPages(sorted.length);
+  const visible = paginate(sorted, page);
 
   return (
-    <div className="flex min-h-[420px] flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-          <Gamepad2 className="size-4" />
+    <div className="flex min-h-[420px] flex-col gap-3 pe-1 sm:pe-2">
+      <div className="flex items-center justify-between gap-2 pe-0.5">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="size-8 rounded-md p-0">
+            <Gamepad2 className="size-4" />
+          </Badge>
+          <h3 className="font-medium">{title}</h3>
         </div>
-        <h3 className="font-medium">{title}</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => onSortOrderChange(toggleSortOrder(sortOrder))}
+        >
+          {sortOrder === "desc" ? (
+            <ArrowDownWideNarrow className="size-3.5" />
+          ) : (
+            <ArrowUpWideNarrow className="size-3.5" />
+          )}
+          {sortOrderLabel(sortOrder)}
+        </Button>
       </div>
-      <ul className="min-h-[360px] flex-1 space-y-2">
+
+      <ItemGroup className="min-h-[360px] flex-1 gap-2">
         {loading &&
           Array.from({ length: PAGE_SIZE }).map((_, i) => (
-            <li
-              key={i}
-              className={cn(LEADER_ITEM_CLASS, "bg-muted/20")}
-            >
+            <Item key={i} variant="outline" className="h-[4.75rem]">
               <Skeleton className="size-7 rounded-md" />
-              <div className={LEADER_ITEM_BODY_CLASS}>
+              <div className="flex flex-1 flex-col gap-1">
                 <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
                 <Skeleton className="h-4 w-20" />
               </div>
               <Skeleton className="h-4 w-16" />
-            </li>
+            </Item>
           ))}
-        {!loading && entries.length === 0 && (
-          <li className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
-            No game activity yet
-          </li>
+
+        {!loading && sorted.length === 0 && (
+          <ListEmpty message="No game activity yet" />
         )}
+
         {!loading &&
           visible.map((entry, index) => {
             const rank = page * PAGE_SIZE + index;
             return (
-            <li key={entry.activity_name} className={LEADER_ITEM_CLASS}>
-              <RankBadge rank={rank} />
-              <div className={LEADER_ITEM_BODY_CLASS}>
-                <GameDisplay
-                  name={entry.activity_name}
-                  iconUrl={gameIcons[entry.activity_name]}
-                />
-                <p className={LEADER_ITEM_META_CLASS}>
-                  {entry.player_count}{" "}
-                  {entry.player_count === 1 ? "player" : "players"}
-                </p>
-              </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
-                {formatDuration(entry.total)}
-              </span>
-            </li>
+              <Item
+                key={entry.activity_name}
+                variant="outline"
+                className="min-h-[4.75rem] items-center py-3"
+              >
+                <ItemMedia variant="icon" className="self-center">
+                  <RankBadge rank={rank} />
+                </ItemMedia>
+                <ItemMedia variant="icon" className="self-center">
+                  <GameIcon
+                    name={entry.activity_name}
+                    iconUrl={gameIcons[entry.activity_name]}
+                  />
+                </ItemMedia>
+                <ItemContent className="min-w-0 justify-center">
+                  <ItemTitle className="line-clamp-none w-full">
+                    {entry.activity_name}
+                  </ItemTitle>
+                  <ItemDescription>
+                    {entry.player_count}{" "}
+                    {entry.player_count === 1 ? "player" : "players"}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions className="shrink-0 pe-1">
+                  <span className="text-sm font-semibold tabular-nums text-primary">
+                    {formatDuration(entry.total)}
+                  </span>
+                </ItemActions>
+              </Item>
             );
           })}
-      </ul>
+      </ItemGroup>
+
       {!loading && (
         <ColumnPagination
           page={page}
           totalPages={pages}
-          totalItems={entries.length}
+          totalItems={sorted.length}
           onPageChange={onPageChange}
         />
       )}
@@ -314,6 +418,9 @@ export function LeaderboardPanel() {
   const [messagesPage, setMessagesPage] = useState(0);
   const [voicePage, setVoicePage] = useState(0);
   const [gamesPage, setGamesPage] = useState(0);
+  const [messagesSort, setMessagesSort] = useState<SortOrder>("desc");
+  const [voiceSort, setVoiceSort] = useState<SortOrder>("desc");
+  const [gamesSort, setGamesSort] = useState<SortOrder>("desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -374,16 +481,11 @@ export function LeaderboardPanel() {
   const { icons: gameIcons } = useGameIcons(gameNames);
 
   return (
-    <Card className="overflow-hidden border-border/40 bg-card/35 shadow-xl shadow-black/25 backdrop-blur-md">
-      <CardHeader className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-transparent to-transparent pb-6">
+    <Card>
+      <CardHeader className="gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Trophy className="size-5 text-amber-400" />
-              <CardTitle className="font-display text-xl font-semibold">
-                Rankings
-              </CardTitle>
-            </div>
+            <CardTitle>Rankings</CardTitle>
             <CardDescription>
               Members for messages & voice · games ranked by play time
               {data?.range.label ? ` · ${data.range.label}` : ""}
@@ -410,20 +512,25 @@ export function LeaderboardPanel() {
         />
       </CardHeader>
 
-      <CardContent className="pt-6">
+      <CardContent className="space-y-6">
         {error && (
-          <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-3">
+        <div className="grid gap-8 lg:grid-cols-3 lg:pe-1">
           <UserLeaderList
             title="Messages"
             icon={MessageSquare}
             entries={data?.messages ?? []}
             page={messagesPage}
             onPageChange={setMessagesPage}
+            sortOrder={messagesSort}
+            onSortOrderChange={(order) => {
+              setMessagesSort(order);
+              setMessagesPage(0);
+            }}
             formatValue={formatNumber}
             loading={loading}
             resolved={resolved}
@@ -435,6 +542,11 @@ export function LeaderboardPanel() {
             entries={data?.voice ?? []}
             page={voicePage}
             onPageChange={setVoicePage}
+            sortOrder={voiceSort}
+            onSortOrderChange={(order) => {
+              setVoiceSort(order);
+              setVoicePage(0);
+            }}
             formatValue={formatDuration}
             loading={loading}
             resolved={resolved}
@@ -445,6 +557,11 @@ export function LeaderboardPanel() {
             entries={data?.games ?? []}
             page={gamesPage}
             onPageChange={setGamesPage}
+            sortOrder={gamesSort}
+            onSortOrderChange={(order) => {
+              setGamesSort(order);
+              setGamesPage(0);
+            }}
             loading={loading}
             gameIcons={gameIcons}
           />

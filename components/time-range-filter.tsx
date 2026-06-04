@@ -1,9 +1,12 @@
 "use client";
 
 import type { TimePreset } from "@/lib/dates";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
 export const TIME_PRESETS: { value: TimePreset; label: string }[] = [
@@ -34,41 +37,40 @@ export function TimeRangeFilter({
 }) {
   return (
     <div className={cn("flex flex-col gap-3", compact && "gap-2")}>
-      <div className="flex flex-wrap gap-2">
+      <ToggleGroup
+        value={[preset]}
+        onValueChange={(values) => {
+          const next = values[0];
+          if (next) onPresetChange(next as TimePreset);
+        }}
+        variant="outline"
+        size="sm"
+        spacing={0}
+        className="flex-wrap"
+      >
         {TIME_PRESETS.map((p) => (
-          <Button
-            key={p.value}
-            type="button"
-            size="sm"
-            variant={preset === p.value ? "default" : "outline"}
-            className={cn(
-              "rounded-full",
-              preset === p.value &&
-                "bg-primary text-primary-foreground shadow-md shadow-primary/20",
-            )}
-            onClick={() => onPresetChange(p.value)}
-          >
+          <ToggleGroupItem key={p.value} value={p.value}>
             {p.label}
-          </Button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
       {preset === "custom" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">From</Label>
+            <Label htmlFor="range-from">From</Label>
             <Input
+              id="range-from"
               type="date"
-              className="h-8 bg-background/50"
               value={customFrom}
               onChange={(e) => onCustomFromChange(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">To</Label>
+            <Label htmlFor="range-to">To</Label>
             <Input
+              id="range-to"
               type="date"
-              className="h-8 bg-background/50"
               value={customTo}
               onChange={(e) => onCustomToChange(e.target.value)}
             />

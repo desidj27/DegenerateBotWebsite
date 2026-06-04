@@ -5,6 +5,12 @@ import { Gamepad2, Hash, Mic, User } from "lucide-react";
 
 import type { ResolvePayload } from "@/lib/discord/types";
 import { formatCell, formatNumber, shortenId } from "@/lib/format";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +30,7 @@ export function UserDisplay({
   if (loading && !user) {
     return (
       <div className="flex items-center gap-2">
-        <Skeleton className="size-8 shrink-0 rounded-full" />
+        <Skeleton className={cn("rounded-full", compact ? "size-7" : "size-8")} />
         {!compact && <Skeleton className="h-4 w-24" />}
       </div>
     );
@@ -44,22 +50,20 @@ export function UserDisplay({
 
   return (
     <div
-      className={cn("flex items-center gap-2 min-w-0", compact && "gap-1.5")}
+      className={cn(
+        "flex min-w-0 items-center gap-2 py-0.5",
+        compact && "gap-1.5",
+      )}
       title={`${user.displayName} (${userId})`}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={user.avatarUrl}
-        alt=""
-        className={cn(
-          "shrink-0 rounded-full bg-muted ring-1 ring-border",
-          compact ? "size-7" : "size-8",
-        )}
-      />
+      <Avatar size={compact ? "sm" : "default"} className="shrink-0">
+        <AvatarImage src={user.avatarUrl} alt={user.displayName} />
+        <AvatarFallback>{user.displayName.slice(0, 1)}</AvatarFallback>
+      </Avatar>
       <div className="min-w-0">
         <p
           className={cn(
-            "truncate font-medium text-foreground",
+            "truncate font-medium",
             compact ? "text-xs" : "text-sm",
           )}
         >
@@ -93,36 +97,23 @@ export function ChannelDisplay({
 
   if (!channel) {
     return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-lg bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground"
-        title={channelId}
-      >
+      <Badge variant="outline" title={channelId}>
         <Mic className="size-3.5" />
         {shortenId(channelId, 10)}
-      </span>
+      </Badge>
     );
   }
 
   const Icon = isVoice ? Mic : Hash;
 
   return (
-    <span
-      className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-muted/25 px-2.5 py-1.5"
-      title={channelId}
-    >
-      <span
-        className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-md",
-          isVoice ? "bg-sky-500/15 text-sky-400" : "bg-muted text-muted-foreground",
-        )}
-      >
-        <Icon className="size-3.5" />
-      </span>
-      <span className="min-w-0 truncate text-sm font-medium">
+    <Badge variant="outline" className="max-w-full" title={channelId}>
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">
         {!isVoice && !channel.name.startsWith("#") ? "#" : ""}
         {channel.name}
       </span>
-    </span>
+    </Badge>
   );
 }
 
@@ -155,14 +146,12 @@ export function GuildDisplay({
   }
 
   return (
-    <span className="inline-flex items-center gap-2 min-w-0" title={guildId}>
+    <span className="inline-flex min-w-0 items-center gap-2" title={guildId}>
       {guild.iconUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={guild.iconUrl}
-          alt=""
-          className="size-6 shrink-0 rounded-md ring-1 ring-border"
-        />
+        <Avatar size="sm" className="rounded-md">
+          <AvatarImage src={guild.iconUrl} alt={guild.name} />
+          <AvatarFallback>{guild.name.slice(0, 1)}</AvatarFallback>
+        </Avatar>
       ) : (
         <Hash className="size-4 shrink-0 text-muted-foreground" />
       )}
@@ -170,9 +159,6 @@ export function GuildDisplay({
     </span>
   );
 }
-
-const LEADER_PILL_CLASS =
-  "inline-flex max-w-full items-center gap-2 rounded-lg border border-border/50 bg-muted/25 px-2.5 py-1.5";
 
 export function LeaderboardUserDisplay({
   userId,
@@ -186,36 +172,28 @@ export function LeaderboardUserDisplay({
   const user = resolved.users[userId];
 
   if (loading && !user) {
-    return <Skeleton className={cn(LEADER_PILL_CLASS, "h-[2.25rem] w-full max-w-xs")} />;
+    return <Skeleton className="size-8 shrink-0 rounded-full" />;
   }
 
   if (!user) {
     return (
-      <span className={LEADER_PILL_CLASS} title={userId}>
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+      <Avatar size="sm" title={userId}>
+        <AvatarFallback>
           <User className="size-3.5" />
-        </span>
-        <span className="truncate font-mono text-sm font-medium">
-          {shortenId(userId, 10)}
-        </span>
-      </span>
+        </AvatarFallback>
+      </Avatar>
     );
   }
 
   return (
-    <span className={LEADER_PILL_CLASS} title={`${user.displayName} (${userId})`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={user.avatarUrl}
-        alt=""
-        className="size-6 shrink-0 rounded-md bg-muted object-cover ring-1 ring-border"
-      />
-      <span className="truncate text-sm font-medium">{user.displayName}</span>
-    </span>
+    <Avatar size="sm" className="shrink-0" title={userId}>
+      <AvatarImage src={user.avatarUrl} alt={user.displayName} />
+      <AvatarFallback>{user.displayName.slice(0, 1)}</AvatarFallback>
+    </Avatar>
   );
 }
 
-function GameIconSlot({
+export function GameIcon({
   name,
   iconUrl,
 }: {
@@ -225,22 +203,19 @@ function GameIconSlot({
   const [failed, setFailed] = useState(false);
   const showImage = Boolean(iconUrl) && !failed;
 
-  if (showImage) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={iconUrl!}
-        alt=""
-        className="size-6 shrink-0 rounded-md bg-muted object-cover ring-1 ring-border"
-        onError={() => setFailed(true)}
-      />
-    );
-  }
-
   return (
-    <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-400">
-      <Gamepad2 className="size-3.5" />
-    </span>
+    <Avatar size="sm" className="shrink-0 rounded-md" title={name}>
+      {showImage ? (
+        <AvatarImage
+          src={iconUrl!}
+          alt={name}
+          onError={() => setFailed(true)}
+        />
+      ) : null}
+      <AvatarFallback className="rounded-md">
+        <Gamepad2 className="size-3.5" />
+      </AvatarFallback>
+    </Avatar>
   );
 }
 
@@ -252,10 +227,13 @@ export function GameDisplay({
   iconUrl?: string | null;
 }) {
   return (
-    <span className={LEADER_PILL_CLASS} title={name}>
-      <GameIconSlot name={name} iconUrl={iconUrl} />
+    <div
+      className="flex min-w-0 max-w-full items-center gap-2 py-0.5"
+      title={name}
+    >
+      <GameIcon name={name} iconUrl={iconUrl} />
       <span className="truncate text-sm font-medium">{name}</span>
-    </span>
+    </div>
   );
 }
 
@@ -295,7 +273,7 @@ export function DataCell({
   if (column === "player_count" || column === "session_count") {
     const n = Number(value ?? 0);
     return (
-      <span className="tabular-nums text-sm">
+      <span className="text-sm tabular-nums">
         {n > 0 ? formatNumber(n) : "—"}
       </span>
     );

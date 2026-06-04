@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import {
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
+  RefreshCw,
+} from "lucide-react";
 
 import {
   type CollectionKey,
@@ -10,10 +14,17 @@ import {
 } from "@/lib/collections";
 import { resolveDateRange, type TimePreset } from "@/lib/dates";
 import { collectionSupportsTimeFilter } from "@/lib/time-filter";
+import {
+  sortOrderLabel,
+  sortRowsByColumn,
+  toggleSortOrder,
+  type SortOrder,
+} from "@/lib/sort";
 import { DataCell } from "@/components/entity-display";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
 import { useGameIcons } from "@/hooks/use-game-icons";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +34,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -40,6 +57,51 @@ type DataResponse = {
   items: Record<string, unknown>[];
 };
 
+const USER_DAILY_SORT_COLUMNS = ["messages", "voice_seconds"] as const;
+type UserDailySortColumn = (typeof USER_DAILY_SORT_COLUMNS)[number];
+
+function isUserDailySortColumn(col: string): col is UserDailySortColumn {
+  return USER_DAILY_SORT_COLUMNS.includes(col as UserDailySortColumn);
+}
+
+const LABEL_COLUMNS = new Set(["user_id", "channel_id", "activity_name"]);
+
+function isLabelColumn(col: string): boolean {
+  return LABEL_COLUMNS.has(col);
+}
+
+function SortableTableHead({
+  label,
+  sortOrder,
+  onToggle,
+}: {
+  label: string;
+  sortOrder: SortOrder;
+  onToggle: () => void;
+}) {
+  return (
+    <TableHead>
+      <div className="flex items-center justify-end gap-2">
+        <span>{label}</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={onToggle}
+        >
+          {sortOrder === "desc" ? (
+            <ArrowDownWideNarrow className="size-3.5" />
+          ) : (
+            <ArrowUpWideNarrow className="size-3.5" />
+          )}
+          {sortOrderLabel(sortOrder)}
+        </Button>
+      </div>
+    </TableHead>
+  );
+}
+
 export function CategoryPanel({
   collection,
   docCount,
@@ -49,12 +111,17 @@ export function CategoryPanel({
 }) {
   const config = TRACKED_COLLECTIONS[collection];
   const hasTimeFilter = collectionSupportsTimeFilter(collection);
+  const isUserDaily = collection === "user_daily";
   const [preset, setPreset] = useState<TimePreset>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<DataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [messagesSort, setMessagesSort] = useState<SortOrder>("desc");
+  const [voiceSort, setVoiceSort] = useState<SortOrder>("desc");
+  const [activeSortColumn, setActiveSortColumn] =
+    useState<UserDailySortColumn>("messages");
 
   const range = useMemo(
     () => resolveDateRange(preset, customFrom, customTo),
@@ -99,11 +166,19 @@ export function CategoryPanel({
     load();
   }, [load]);
 
-  const showing = data?.items.length ?? 0;
+  const sortedItems = useMemo(() => {
+    const items = data?.items ?? [];
+    if (!isUserDaily) return items;
+    const order =
+      activeSortColumn === "messages" ? messagesSort : voiceSort;
+    return sortRowsByColumn(items, activeSortColumn, order);
+  }, [activeSortColumn, data?.items, isUserDaily, messagesSort, voiceSort]);
+
+  const showing = sortedItems.length;
   const total = data?.total ?? docCount ?? 0;
 
   const { resolved, loading: resolving } = useDiscordResolve(
-    isByGame ? [] : (data?.items ?? []),
+    isByGame ? [] : sortedItems,
   );
 
   const activityNames = useMemo(
@@ -111,13 +186,13 @@ export function CategoryPanel({
       isByGame
         ? [
             ...new Set(
-              (data?.items ?? [])
+              sortedItems
                 .map((row) => String(row.activity_name ?? ""))
                 .filter(Boolean),
             ),
           ]
         : [],
-    [data?.items, isByGame],
+    [isByGame, sortedItems],
   );
 
   const { icons: gameIcons } = useGameIcons(activityNames);
@@ -129,28 +204,29 @@ export function CategoryPanel({
     if (col === "player_count") return "Players";
     if (col === "session_count") return "Sessions";
     if (col === "total_seconds") return "Play time";
+    if (col === "messages") return "Messages";
+    if (col === "voice_seconds") return "Voice time";
     return col.replace(/_/g, " ");
   }
 
+  function toggleColumnSort(col: UserDailySortColumn) {
+    if (col === "messages") {
+      setMessagesSort(toggleSortOrder(messagesSort));
+    } else {
+      setVoiceSort(toggleSortOrder(voiceSort));
+    }
+    setActiveSortColumn(col);
+  }
+
   return (
-    <Card
-      id={collection}
-      className="scroll-mt-28 border-border/40 bg-card/30 shadow-lg shadow-black/20 backdrop-blur-md"
-    >
-      <CardHeader className="gap-4 border-b border-border/40 pb-4">
+    <Card id={collection} className="scroll-mt-32">
+      <CardHeader className="gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <CardTitle className="font-display text-lg font-semibold">
-              {config.label}
-            </CardTitle>
+            <CardTitle>{config.label}</CardTitle>
             <CardDescription>
               {config.description}
-              {hasTimeFilter && (
-                <span className="text-muted-foreground/80">
-                  {" "}
-                  · {range.label}
-                </span>
-              )}
+              {hasTimeFilter && ` · ${range.label}`}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -158,7 +234,7 @@ export function CategoryPanel({
               {loading ? "…" : `${showing}${total > showing ? ` / ${total}` : ""}`}{" "}
               rows
             </Badge>
-            <Button variant="ghost" size="icon-sm" onClick={load}>
+            <Button variant="outline" size="icon-sm" onClick={load}>
               <RefreshCw
                 className={cn("size-4", loading && "animate-spin")}
               />
@@ -177,31 +253,40 @@ export function CategoryPanel({
             compact
           />
         ) : (
-          <Badge variant="secondary" className="w-fit rounded-full">
-            All time · no date on this data
-          </Badge>
+          <Badge variant="secondary">All time</Badge>
         )}
       </CardHeader>
 
-      <CardContent className="p-0">
+      <CardContent className="space-y-4">
         {error && (
-          <p className="mx-4 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
-        <ScrollArea className="max-h-[min(480px,60vh)] w-full">
+        <ScrollArea className="h-[min(480px,60vh)] w-full rounded-lg border">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                {columns.map((col) => (
-                  <TableHead
-                    key={col}
-                    className="sticky top-0 z-10 bg-muted/80 text-xs font-semibold uppercase tracking-wide backdrop-blur-sm"
-                  >
-                    {columnLabel(col)}
-                  </TableHead>
-                ))}
+              <TableRow>
+                {columns.map((col) =>
+                  isUserDaily && isUserDailySortColumn(col) ? (
+                    <SortableTableHead
+                      key={col}
+                      label={columnLabel(col)}
+                      sortOrder={
+                        col === "messages" ? messagesSort : voiceSort
+                      }
+                      onToggle={() => toggleColumnSort(col)}
+                    />
+                  ) : (
+                    <TableHead
+                      key={col}
+                      className={isLabelColumn(col) ? "text-left" : "text-right"}
+                    >
+                      {columnLabel(col)}
+                    </TableHead>
+                  ),
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -216,24 +301,33 @@ export function CategoryPanel({
                   </TableRow>
                 ))}
 
-              {!loading && data?.items.length === 0 && (
+              {!loading && sortedItems.length === 0 && (
                 <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-20 text-center text-muted-foreground"
-                  >
-                    No records in this period
+                  <TableCell colSpan={columns.length}>
+                    <Empty className="border-0 py-8">
+                      <EmptyHeader>
+                        <EmptyTitle>No records in this period</EmptyTitle>
+                        <EmptyDescription>
+                          Try a different time range.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
                   </TableCell>
                 </TableRow>
               )}
 
               {!loading &&
-                data?.items.map((row, index) => (
+                sortedItems.map((row, index) => (
                   <TableRow key={`${row._id}-${index}`}>
                     {columns.map((col) => (
                       <TableCell
                         key={col}
-                        className="max-w-[240px] py-2.5 align-middle"
+                        className={cn(
+                          "align-middle",
+                          isLabelColumn(col)
+                            ? "max-w-[280px] py-3 text-left"
+                            : "max-w-[240px] text-right tabular-nums",
+                        )}
                       >
                         <DataCell
                           column={col}

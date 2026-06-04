@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+
 type EnvStatus = {
   configured: boolean;
   mongodb: boolean;
@@ -35,54 +41,50 @@ export function EnvSetupBanner() {
   const onVercel = status.vercel;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 md:px-8">
-      <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-        <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
-        <div className="space-y-2">
-          <p className="font-medium">Missing environment variables</p>
-          <ul className="list-inside list-disc space-y-1 text-amber-100/90">
+    <div className="mx-auto max-w-6xl px-4 md:px-8">
+      <Alert variant="destructive" className="border-amber-500/40 bg-amber-500/10 text-amber-50">
+        <AlertCircle />
+        <AlertTitle>Missing environment variables</AlertTitle>
+        <AlertDescription>
+          <ul className="mt-2 list-inside list-disc space-y-1">
             {!status.mongodb && (
               <li>
-                <code className="rounded bg-black/30 px-1 font-mono text-xs">
+                <code className="rounded bg-muted px-1 font-mono text-xs">
                   MONGODB_URI
                 </code>
                 {", "}
-                <code className="rounded bg-black/30 px-1 font-mono text-xs">
+                <code className="rounded bg-muted px-1 font-mono text-xs">
                   MONGODB_DB
                 </code>
               </li>
             )}
             {!status.discord && (
               <li>
-                <code className="rounded bg-black/30 px-1 font-mono text-xs">
+                <code className="rounded bg-muted px-1 font-mono text-xs">
                   DISCORD_BOT_TOKEN
                 </code>{" "}
-                (usernames, avatars, voice channel names)
+                (usernames, avatars, channel names)
               </li>
             )}
           </ul>
-          <p className="text-amber-100/80">
+          <p className="mt-3">
             {onVercel ? (
               <>
-                Set these in{" "}
-                <strong>Vercel → your project → Settings → Environment Variables</strong>
-                . Enable <strong>Production</strong> (and Preview if you use preview
-                deploys). Then <strong>redeploy</strong> — new variables are not
-                picked up until you redeploy.
+                Set these in Vercel → Settings → Environment Variables, then
+                redeploy.
               </>
             ) : (
               <>
-                For local dev, add them to{" "}
-                <code className="rounded bg-black/30 px-1 font-mono text-xs">
+                Add them to{" "}
+                <code className="rounded bg-muted px-1 font-mono text-xs">
                   .env.local
                 </code>{" "}
-                and restart <code className="font-mono text-xs">npm run dev</code>.
-                On Vercel, use Project Settings → Environment Variables instead.
+                and restart the dev server.
               </>
             )}
           </p>
-        </div>
-      </div>
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

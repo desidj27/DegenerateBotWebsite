@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Database, Hash, Radio, Trophy } from "lucide-react";
+import { BarChart3, Database, Trophy } from "lucide-react";
 
 import {
   COLLECTION_GROUPS,
@@ -12,26 +12,23 @@ import { CategoryPanel } from "@/components/category-panel";
 import { EnvSetupBanner } from "@/components/discord-setup-banner";
 import { LeaderboardPanel } from "@/components/leaderboard-panel";
 import {
+  SectionBlock,
+  SectionDivider,
   SectionHeading,
-  SiteBackground,
 } from "@/components/site-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type CollectionMeta = {
   key: CollectionKey;
   count: number;
 };
 
-const NAV = [
-  { id: "leaderboard", label: "Leaderboards", icon: Trophy },
-  { id: "data", label: "Data", icon: Database },
-] as const;
-
 export function Dashboard() {
   const [meta, setMeta] = useState<CollectionMeta[]>([]);
-  const [activeSection, setActiveSection] = useState<string>("leaderboard");
+  const [activeSection, setActiveSection] = useState("leaderboard");
+
   const loadMeta = useCallback(async () => {
     try {
       const res = await fetch("/api/collections");
@@ -60,83 +57,70 @@ export function Dashboard() {
   }
 
   return (
-    <div className="relative min-h-screen">
-      <SiteBackground />
-
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/75 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 md:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 md:px-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-1">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-primary">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 DegenerateBot
               </p>
-              <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
+              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
                 Activity Tracker
               </h1>
-              <p className="max-w-md text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Messages, voice, and presence.
               </p>
             </div>
-            <Badge
-              variant="secondary"
-              className="h-8 gap-1.5 rounded-full px-3 tabular-nums"
-            >
-              <BarChart3 className="size-3.5 text-primary" />
+            <Badge variant="secondary" className="gap-1.5 tabular-nums">
+              <BarChart3 className="size-3.5" />
               {totalDocs.toLocaleString()} records
             </Badge>
           </div>
 
-          <nav className="flex gap-1 overflow-x-auto pb-0.5">
-            {NAV.map(({ id, label, icon: Icon }) => (
-              <Button
-                key={id}
-                size="sm"
-                variant={activeSection === id ? "default" : "ghost"}
-                className={cn(
-                  "shrink-0 gap-1.5 rounded-full",
-                  activeSection === id &&
-                    "bg-primary text-primary-foreground shadow-md shadow-primary/25",
-                )}
-                onClick={() => scrollTo(id)}
-              >
-                <Icon className="size-3.5" />
-                {label}
-              </Button>
-            ))}
-          </nav>
+          <Tabs value={activeSection} onValueChange={scrollTo}>
+            <TabsList>
+              <TabsTrigger value="leaderboard" className="gap-1.5">
+                <Trophy className="size-3.5" />
+                Leaderboards
+              </TabsTrigger>
+              <TabsTrigger value="data" className="gap-1.5">
+                <Database className="size-3.5" />
+                Data
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </header>
 
-      <EnvSetupBanner />
+      <div className="py-4">
+        <EnvSetupBanner />
+      </div>
 
-      <main className="mx-auto max-w-6xl space-y-16 px-4 py-10 md:px-8 md:py-14">
-        <section id="leaderboard" className="scroll-mt-36 space-y-6">
+      <main className="mx-auto max-w-6xl space-y-12 px-4 pb-12 md:px-8">
+        <SectionBlock id="leaderboard" className="scroll-mt-32 space-y-6">
           <SectionHeading
-            eyebrow="Rankings"
             title="Leaderboards"
             description="Messages and voice by member · games ranked by play time."
-            icon={Trophy}
           />
           <LeaderboardPanel />
-        </section>
+        </SectionBlock>
 
-        <section id="data" className="scroll-mt-36 space-y-10">
+        <SectionDivider />
+
+        <SectionBlock id="data" className="scroll-mt-32 space-y-8">
           <SectionHeading
-            eyebrow="Raw data"
             title="All categories"
-            description="Users and channels show Discord names when your bot token is configured."
-            icon={Radio}
+            description="Browse tracked stats by collection."
           />
 
-          {COLLECTION_GROUPS.map((group) => (
-            <div key={group.title} className="space-y-5">
-              <div className="flex items-center gap-2">
-                <Hash className="size-4 text-primary/70" />
-                <h3 className="font-display text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                  {group.title}
-                </h3>
-              </div>
-              <div className="space-y-5">
+          {COLLECTION_GROUPS.map((group, index) => (
+            <div key={group.title} className="space-y-4">
+              {index > 0 && <Separator />}
+              <h3 className="text-sm font-medium text-muted-foreground">
+                {group.title}
+              </h3>
+              <div className="space-y-4">
                 {group.keys.map((key) => (
                   <CategoryPanel
                     key={key}
@@ -147,11 +131,11 @@ export function Dashboard() {
               </div>
             </div>
           ))}
-        </section>
+        </SectionBlock>
       </main>
 
-      <footer className="border-t border-border/30 py-8 text-center">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+      <footer className="border-t py-6">
+        <p className="text-center text-xs text-muted-foreground">
           DegenerateBot · MongoDB
         </p>
       </footer>
