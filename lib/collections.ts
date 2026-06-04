@@ -103,6 +103,19 @@ export const COLLECTION_KEYS = Object.keys(
   TRACKED_COLLECTIONS,
 ) as CollectionKey[];
 
+/** Collections shown as individual dashboard data tabs (order preserved). */
+export const DATA_TAB_COLLECTIONS = [
+  "user_daily",
+  "channel_daily",
+  "activity_totals",
+  "voice_sessions",
+  "member_joins",
+  "economy_balances",
+  "boost_events",
+] as const satisfies readonly CollectionKey[];
+
+export type DataTabCollectionKey = (typeof DATA_TAB_COLLECTIONS)[number];
+
 export const COLLECTION_GROUPS: {
   title: string;
   keys: CollectionKey[];

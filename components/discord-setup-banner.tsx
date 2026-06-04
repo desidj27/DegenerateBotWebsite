@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 
+import { DASHBOARD_CONTENT_CLASS } from "@/lib/panel-layout";
+
 import {
   Alert,
   AlertDescription,
@@ -41,7 +43,7 @@ export function EnvSetupBanner() {
   const onVercel = status.vercel;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 md:px-8">
+    <div className={DASHBOARD_CONTENT_CLASS}>
       <Alert variant="destructive" className="border-amber-500/40 bg-amber-500/10 text-amber-50">
         <AlertCircle />
         <AlertTitle>Missing environment variables</AlertTitle>

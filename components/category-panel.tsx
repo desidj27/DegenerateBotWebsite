@@ -1,11 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ArrowDownWideNarrow,
-  ArrowUpWideNarrow,
-  RefreshCw,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import {
   type CollectionKey,
@@ -15,12 +11,12 @@ import {
 import { resolveDateRange, type TimePreset } from "@/lib/dates";
 import { collectionSupportsTimeFilter } from "@/lib/time-filter";
 import {
-  sortOrderLabel,
   sortRowsByColumn,
   toggleSortOrder,
   type SortOrder,
 } from "@/lib/sort";
 import { DataCell } from "@/components/entity-display";
+import { SortIconButton } from "@/components/sort-icon-button";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
 import { useGameIcons } from "@/hooks/use-game-icons";
@@ -50,6 +46,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  MAIN_PANEL_CARD_CLASS,
+  PANEL_BODY_HEIGHT_CLASS,
+} from "@/lib/panel-layout";
 import { cn } from "@/lib/utils";
 
 type DataResponse = {
@@ -57,11 +57,18 @@ type DataResponse = {
   items: Record<string, unknown>[];
 };
 
-const USER_DAILY_SORT_COLUMNS = ["messages", "voice_seconds"] as const;
-type UserDailySortColumn = (typeof USER_DAILY_SORT_COLUMNS)[number];
+const CLIENT_SORT_COLUMNS: Partial<Record<CollectionKey, readonly string[]>> = {
+  user_daily: ["messages", "voice_seconds"],
+  channel_daily: ["messages", "voice_seconds"],
+  activity_totals: ["total_seconds", "player_count", "session_count"],
+};
 
-function isUserDailySortColumn(col: string): col is UserDailySortColumn {
-  return USER_DAILY_SORT_COLUMNS.includes(col as UserDailySortColumn);
+function clientSortColumns(collection: CollectionKey): readonly string[] {
+  return CLIENT_SORT_COLUMNS[collection] ?? [];
+}
+
+function isClientSortColumn(collection: CollectionKey, col: string): boolean {
+  return clientSortColumns(collection).includes(col);
 }
 
 const LABEL_COLUMNS = new Set(["user_id", "channel_id", "activity_name"]);
@@ -81,22 +88,13 @@ function SortableTableHead({
 }) {
   return (
     <TableHead>
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-1">
         <span>{label}</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
+        <SortIconButton
+          sortOrder={sortOrder}
           onClick={onToggle}
-        >
-          {sortOrder === "desc" ? (
-            <ArrowDownWideNarrow className="size-3.5" />
-          ) : (
-            <ArrowUpWideNarrow className="size-3.5" />
-          )}
-          {sortOrderLabel(sortOrder)}
-        </Button>
+          label={label}
+        />
       </div>
     </TableHead>
   );
@@ -105,23 +103,26 @@ function SortableTableHead({
 export function CategoryPanel({
   collection,
   docCount,
+  className,
 }: {
   collection: CollectionKey;
   docCount?: number;
+  className?: string;
 }) {
   const config = TRACKED_COLLECTIONS[collection];
   const hasTimeFilter = collectionSupportsTimeFilter(collection);
-  const isUserDaily = collection === "user_daily";
+  const sortableColumns = clientSortColumns(collection);
+  const canClientSort = sortableColumns.length > 0;
   const [preset, setPreset] = useState<TimePreset>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<DataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [messagesSort, setMessagesSort] = useState<SortOrder>("desc");
-  const [voiceSort, setVoiceSort] = useState<SortOrder>("desc");
-  const [activeSortColumn, setActiveSortColumn] =
-    useState<UserDailySortColumn>("messages");
+  const [sortOrders, setSortOrders] = useState<Record<string, SortOrder>>({});
+  const [activeSortColumn, setActiveSortColumn] = useState(
+    () => sortableColumns[0] ?? "messages",
+  );
 
   const range = useMemo(
     () => resolveDateRange(preset, customFrom, customTo),
@@ -168,11 +169,10 @@ export function CategoryPanel({
 
   const sortedItems = useMemo(() => {
     const items = data?.items ?? [];
-    if (!isUserDaily) return items;
-    const order =
-      activeSortColumn === "messages" ? messagesSort : voiceSort;
+    if (!canClientSort) return items;
+    const order = sortOrders[activeSortColumn] ?? "desc";
     return sortRowsByColumn(items, activeSortColumn, order);
-  }, [activeSortColumn, data?.items, isUserDaily, messagesSort, voiceSort]);
+  }, [activeSortColumn, canClientSort, data?.items, sortOrders]);
 
   const showing = sortedItems.length;
   const total = data?.total ?? docCount ?? 0;
@@ -209,17 +209,23 @@ export function CategoryPanel({
     return col.replace(/_/g, " ");
   }
 
-  function toggleColumnSort(col: UserDailySortColumn) {
-    if (col === "messages") {
-      setMessagesSort(toggleSortOrder(messagesSort));
-    } else {
-      setVoiceSort(toggleSortOrder(voiceSort));
-    }
+  function getSortOrder(col: string): SortOrder {
+    return sortOrders[col] ?? "desc";
+  }
+
+  function toggleColumnSort(col: string) {
+    setSortOrders((prev) => ({
+      ...prev,
+      [col]: toggleSortOrder(prev[col] ?? "desc"),
+    }));
     setActiveSortColumn(col);
   }
 
   return (
-    <Card id={collection} className="scroll-mt-32">
+    <Card
+      id={collection}
+      className={cn(MAIN_PANEL_CARD_CLASS, "scroll-mt-32", className)}
+    >
       <CardHeader className="gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
@@ -264,18 +270,18 @@ export function CategoryPanel({
           </Alert>
         )}
 
-        <ScrollArea className="h-[min(480px,60vh)] w-full rounded-lg border">
+        <ScrollArea
+          className={cn(PANEL_BODY_HEIGHT_CLASS, "w-full rounded-lg border")}
+        >
           <Table>
             <TableHeader>
               <TableRow>
                 {columns.map((col) =>
-                  isUserDaily && isUserDailySortColumn(col) ? (
+                  canClientSort && isClientSortColumn(collection, col) ? (
                     <SortableTableHead
                       key={col}
                       label={columnLabel(col)}
-                      sortOrder={
-                        col === "messages" ? messagesSort : voiceSort
-                      }
+                      sortOrder={getSortOrder(col)}
                       onToggle={() => toggleColumnSort(col)}
                     />
                   ) : (
@@ -325,8 +331,8 @@ export function CategoryPanel({
                         className={cn(
                           "align-middle",
                           isLabelColumn(col)
-                            ? "max-w-[280px] py-3 text-left"
-                            : "max-w-[240px] text-right tabular-nums",
+                            ? "max-w-none py-3 text-left"
+                            : "text-right tabular-nums",
                         )}
                       >
                         <DataCell

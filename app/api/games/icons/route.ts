@@ -12,6 +12,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       configured: isDiscordConfigured(),
+      sources: {
+        discord: isDiscordConfigured(),
+        brandFallback: true,
+      },
       icons,
     });
   } catch (error) {

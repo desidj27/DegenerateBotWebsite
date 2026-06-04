@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Gamepad2, Hash, Mic, User } from "lucide-react";
+import { Crown, Gamepad2, Hash, Mic, User } from "lucide-react";
 
 import type { ResolvePayload } from "@/lib/discord/types";
 import { formatCell, formatNumber, shortenId } from "@/lib/format";
@@ -63,14 +63,18 @@ export function UserDisplay({
       <div className="min-w-0">
         <p
           className={cn(
-            "truncate font-medium",
+            "break-words font-medium",
             compact ? "text-xs" : "text-sm",
           )}
+          title={user.displayName}
         >
           {user.displayName}
         </p>
-        {!compact && user.username !== user.displayName && (
-          <p className="truncate text-xs text-muted-foreground">
+        {!compact && (
+          <p
+            className="break-all text-xs text-muted-foreground"
+            title={`@${user.username}`}
+          >
             @{user.username}
           </p>
         )}
@@ -160,11 +164,52 @@ export function GuildDisplay({
   );
 }
 
-export function LeaderboardUserDisplay({
+const RANK_CROWN_STYLES = [
+  "border-amber-500/60 bg-amber-950/90 text-amber-300 [&>svg]:text-amber-300",
+  "border-zinc-400/60 bg-zinc-900/90 text-zinc-200 [&>svg]:text-zinc-200",
+  "border-orange-600/60 bg-orange-950/90 text-orange-200 [&>svg]:text-orange-300",
+] as const;
+
+/** Lighter tints of crown colors for leaderboard row cards (ranks 1–3). */
+const RANK_TOP_CARD_STYLES = [
+  "border-amber-500/25 bg-amber-500/8",
+  "border-zinc-400/22 bg-zinc-400/7",
+  "border-orange-600/25 bg-orange-500/8",
+] as const;
+
+export function rankTopCardClassName(rank: number): string | undefined {
+  if (rank >= 3) return undefined;
+  return RANK_TOP_CARD_STYLES[rank];
+}
+
+export function RankedAvatarBadge({ rank }: { rank: number }) {
+  const display = rank + 1;
+  if (rank < 3) {
+    return (
+      <span
+        className={cn(
+          "absolute -top-0.5 -left-0.5 z-10 flex size-5 items-center justify-center rounded-full border ring-1 ring-background",
+          RANK_CROWN_STYLES[rank],
+        )}
+      >
+        <Crown className="size-2.5" />
+      </span>
+    );
+  }
+  return (
+    <span className="absolute -top-0.5 -left-0.5 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-muted text-[9px] font-bold tabular-nums ring-1 ring-background">
+      {display}
+    </span>
+  );
+}
+
+export function RankedLeaderUserAvatar({
+  rank,
   userId,
   resolved,
   loading,
 }: {
+  rank: number;
   userId: string;
   resolved: ResolvePayload;
   loading?: boolean;
@@ -172,24 +217,61 @@ export function LeaderboardUserDisplay({
   const user = resolved.users[userId];
 
   if (loading && !user) {
-    return <Skeleton className="size-8 shrink-0 rounded-full" />;
-  }
-
-  if (!user) {
     return (
-      <Avatar size="sm" title={userId}>
-        <AvatarFallback>
-          <User className="size-3.5" />
-        </AvatarFallback>
-      </Avatar>
+      <div className="relative shrink-0">
+        <Skeleton className="size-11 rounded-full" />
+        <Skeleton className="absolute -top-0.5 -left-0.5 size-5 rounded-full" />
+      </div>
     );
   }
 
   return (
-    <Avatar size="sm" className="shrink-0" title={userId}>
-      <AvatarImage src={user.avatarUrl} alt={user.displayName} />
-      <AvatarFallback>{user.displayName.slice(0, 1)}</AvatarFallback>
-    </Avatar>
+    <div className="relative shrink-0">
+      <Avatar size="lg" className="size-11" title={userId}>
+        {user ? (
+          <>
+            <AvatarImage src={user.avatarUrl} alt={user.displayName} />
+            <AvatarFallback>{user.displayName.slice(0, 1)}</AvatarFallback>
+          </>
+        ) : (
+          <AvatarFallback>
+            <User className="size-4" />
+          </AvatarFallback>
+        )}
+      </Avatar>
+      <RankedAvatarBadge rank={rank} />
+    </div>
+  );
+}
+
+export function RankedLeaderGameAvatar({
+  rank,
+  name,
+  iconUrl,
+}: {
+  rank: number;
+  name: string;
+  iconUrl?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showImage = Boolean(iconUrl) && !failed;
+
+  return (
+    <div className="relative shrink-0">
+      <Avatar size="lg" className="size-11" title={name}>
+        {showImage ? (
+          <AvatarImage
+            src={iconUrl!}
+            alt={name}
+            onError={() => setFailed(true)}
+          />
+        ) : null}
+        <AvatarFallback>
+          <Gamepad2 className="size-4" />
+        </AvatarFallback>
+      </Avatar>
+      <RankedAvatarBadge rank={rank} />
+    </div>
   );
 }
 

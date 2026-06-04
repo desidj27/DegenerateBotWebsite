@@ -2,11 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownWideNarrow,
-  ArrowUpWideNarrow,
   ChevronLeft,
   ChevronRight,
-  Crown,
   Gamepad2,
   MessageSquare,
   Mic,
@@ -15,19 +12,16 @@ import {
 
 import type { DateRange, TimePreset } from "@/lib/dates";
 import {
-  GameIcon,
-  LeaderboardUserDisplay,
+  RankedLeaderGameAvatar,
+  RankedLeaderUserAvatar,
+  rankTopCardClassName,
 } from "@/components/entity-display";
 import { TimeRangeFilter } from "@/components/time-range-filter";
 import { useDiscordResolve } from "@/hooks/use-discord-resolve";
 import { useGameIcons } from "@/hooks/use-game-icons";
 import { formatDuration, formatNumber, shortenId } from "@/lib/format";
-import {
-  sortByNumber,
-  sortOrderLabel,
-  toggleSortOrder,
-  type SortOrder,
-} from "@/lib/sort";
+import { sortByNumber, toggleSortOrder, type SortOrder } from "@/lib/sort";
+import { SortIconButton } from "@/components/sort-icon-button";
 import type { ResolvePayload } from "@/lib/discord/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -45,16 +39,13 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
+import { Item, ItemGroup } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  LEADERBOARD_COLUMN_CLASS,
+  LEADERBOARD_LIST_CLASS,
+  MAIN_PANEL_CARD_CLASS,
+} from "@/lib/panel-layout";
 import { cn } from "@/lib/utils";
 
 type UserLeaderEntry = { user_id: string; total: number };
@@ -75,34 +66,6 @@ type LeaderboardResponse = {
 };
 
 const PAGE_SIZE = 10;
-
-const RANK_CROWN_STYLES = [
-  "border-amber-500/50 bg-amber-500/20 text-amber-300 [&>svg]:text-amber-300",
-  "border-zinc-400/50 bg-zinc-400/20 text-zinc-200 [&>svg]:text-zinc-200",
-  "border-orange-600/50 bg-orange-700/25 text-orange-200 [&>svg]:text-orange-300",
-] as const;
-
-function RankBadge({ rank }: { rank: number }) {
-  const display = rank + 1;
-  if (rank < 3) {
-    return (
-      <Badge
-        variant="outline"
-        className={cn(
-          "size-7 rounded-full border p-0 [&>svg]:size-3.5",
-          RANK_CROWN_STYLES[rank],
-        )}
-      >
-        <Crown />
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="size-7 rounded-full p-0 tabular-nums">
-      {display}
-    </Badge>
-  );
-}
 
 function ColumnPagination({
   page,
@@ -200,7 +163,7 @@ function UserLeaderList({
   const visible = paginate(sorted, page);
 
   return (
-    <div className="flex min-h-[420px] flex-col gap-3 pe-1 sm:pe-2">
+    <div className={LEADERBOARD_COLUMN_CLASS}>
       <div className="flex items-center justify-between gap-2 pe-0.5">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="size-8 rounded-md p-0">
@@ -208,32 +171,26 @@ function UserLeaderList({
           </Badge>
           <h3 className="font-medium">{title}</h3>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
+        <SortIconButton
+          sortOrder={sortOrder}
           onClick={() => onSortOrderChange(toggleSortOrder(sortOrder))}
-        >
-          {sortOrder === "desc" ? (
-            <ArrowDownWideNarrow className="size-3.5" />
-          ) : (
-            <ArrowUpWideNarrow className="size-3.5" />
-          )}
-          {sortOrderLabel(sortOrder)}
-        </Button>
+          label={title}
+        />
       </div>
 
-      <ItemGroup className="min-h-[360px] flex-1 gap-2">
+      <ItemGroup className={LEADERBOARD_LIST_CLASS}>
         {loading &&
           Array.from({ length: PAGE_SIZE }).map((_, i) => (
-            <Item key={i} variant="outline" className="h-[4.75rem]">
-              <Skeleton className="size-7 rounded-full" />
-              <div className="flex flex-1 flex-col gap-1">
-                <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
-                <Skeleton className="h-4 w-20" />
+            <Item key={i} variant="outline" className="items-center gap-3 py-3">
+              <div className="relative shrink-0">
+                <Skeleton className="size-11 rounded-full" />
+                <Skeleton className="absolute -top-0.5 -left-0.5 size-5 rounded-full" />
               </div>
-              <Skeleton className="h-4 w-16" />
+              <div className="flex flex-1 flex-col gap-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <Skeleton className="h-4 w-10" />
             </Item>
           ))}
 
@@ -249,31 +206,35 @@ function UserLeaderList({
               <Item
                 key={entry.user_id}
                 variant="outline"
-                className="min-h-[4.75rem] items-center py-3"
+                className={cn(
+                  "flex-nowrap items-center gap-3 py-3",
+                  rankTopCardClassName(rank),
+                )}
               >
-                <ItemMedia variant="icon" className="self-center">
-                  <RankBadge rank={rank} />
-                </ItemMedia>
-                <ItemMedia variant="image" className="self-center">
-                  <LeaderboardUserDisplay
-                    userId={entry.user_id}
-                    resolved={resolved}
-                    loading={resolving}
-                  />
-                </ItemMedia>
-                <ItemContent className="min-w-0 justify-center">
-                  <ItemTitle className="line-clamp-none w-full">
+                <RankedLeaderUserAvatar
+                  rank={rank}
+                  userId={entry.user_id}
+                  resolved={resolved}
+                  loading={resolving}
+                />
+                <div
+                  className="min-w-0 flex-1 basis-0 space-y-0.5"
+                  title={
+                    user
+                      ? `${user.displayName} (@${user.username})`
+                      : entry.user_id
+                  }
+                >
+                  <p className="font-medium leading-snug break-words">
                     {user?.displayName ?? shortenId(entry.user_id, 10)}
-                  </ItemTitle>
-                  <ItemDescription>
+                  </p>
+                  <p className="text-sm text-muted-foreground break-all">
                     {user ? `@${user.username}` : "\u00a0"}
-                  </ItemDescription>
-                </ItemContent>
-                <ItemActions className="shrink-0 pe-1">
-                  <span className="text-sm font-semibold tabular-nums text-primary">
-                    {formatValue(entry.total)}
-                  </span>
-                </ItemActions>
+                  </p>
+                </div>
+                <span className="shrink-0 pe-1 text-sm font-semibold tabular-nums text-primary">
+                  {formatValue(entry.total)}
+                </span>
               </Item>
             );
           })}
@@ -318,7 +279,7 @@ function GameLeaderList({
   const visible = paginate(sorted, page);
 
   return (
-    <div className="flex min-h-[420px] flex-col gap-3 pe-1 sm:pe-2">
+    <div className={LEADERBOARD_COLUMN_CLASS}>
       <div className="flex items-center justify-between gap-2 pe-0.5">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="size-8 rounded-md p-0">
@@ -326,32 +287,26 @@ function GameLeaderList({
           </Badge>
           <h3 className="font-medium">{title}</h3>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
+        <SortIconButton
+          sortOrder={sortOrder}
           onClick={() => onSortOrderChange(toggleSortOrder(sortOrder))}
-        >
-          {sortOrder === "desc" ? (
-            <ArrowDownWideNarrow className="size-3.5" />
-          ) : (
-            <ArrowUpWideNarrow className="size-3.5" />
-          )}
-          {sortOrderLabel(sortOrder)}
-        </Button>
+          label={title}
+        />
       </div>
 
-      <ItemGroup className="min-h-[360px] flex-1 gap-2">
+      <ItemGroup className={LEADERBOARD_LIST_CLASS}>
         {loading &&
           Array.from({ length: PAGE_SIZE }).map((_, i) => (
-            <Item key={i} variant="outline" className="h-[4.75rem]">
-              <Skeleton className="size-7 rounded-md" />
-              <div className="flex flex-1 flex-col gap-1">
-                <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
-                <Skeleton className="h-4 w-20" />
+            <Item key={i} variant="outline" className="items-center gap-3 py-3">
+              <div className="relative shrink-0">
+                <Skeleton className="size-11 rounded-full" />
+                <Skeleton className="absolute -top-0.5 -left-0.5 size-5 rounded-full" />
               </div>
-              <Skeleton className="h-4 w-16" />
+              <div className="flex flex-1 flex-col gap-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <Skeleton className="h-4 w-10" />
             </Item>
           ))}
 
@@ -366,31 +321,31 @@ function GameLeaderList({
               <Item
                 key={entry.activity_name}
                 variant="outline"
-                className="min-h-[4.75rem] items-center py-3"
+                className={cn(
+                  "flex-nowrap items-center gap-3 py-3",
+                  rankTopCardClassName(rank),
+                )}
               >
-                <ItemMedia variant="icon" className="self-center">
-                  <RankBadge rank={rank} />
-                </ItemMedia>
-                <ItemMedia variant="icon" className="self-center">
-                  <GameIcon
-                    name={entry.activity_name}
-                    iconUrl={gameIcons[entry.activity_name]}
-                  />
-                </ItemMedia>
-                <ItemContent className="min-w-0 justify-center">
-                  <ItemTitle className="line-clamp-none w-full">
+                <RankedLeaderGameAvatar
+                  rank={rank}
+                  name={entry.activity_name}
+                  iconUrl={gameIcons[entry.activity_name]}
+                />
+                <div
+                  className="min-w-0 flex-1 basis-0 space-y-0.5"
+                  title={entry.activity_name}
+                >
+                  <p className="font-medium leading-snug break-words">
                     {entry.activity_name}
-                  </ItemTitle>
-                  <ItemDescription>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
                     {entry.player_count}{" "}
                     {entry.player_count === 1 ? "player" : "players"}
-                  </ItemDescription>
-                </ItemContent>
-                <ItemActions className="shrink-0 pe-1">
-                  <span className="text-sm font-semibold tabular-nums text-primary">
-                    {formatDuration(entry.total)}
-                  </span>
-                </ItemActions>
+                  </p>
+                </div>
+                <span className="shrink-0 pe-1 text-sm font-semibold tabular-nums text-primary">
+                  {formatDuration(entry.total)}
+                </span>
               </Item>
             );
           })}
@@ -408,7 +363,7 @@ function GameLeaderList({
   );
 }
 
-export function LeaderboardPanel() {
+export function LeaderboardPanel({ className }: { className?: string }) {
   const [preset, setPreset] = useState<TimePreset>("7d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -481,7 +436,7 @@ export function LeaderboardPanel() {
   const { icons: gameIcons } = useGameIcons(gameNames);
 
   return (
-    <Card>
+    <Card className={cn(MAIN_PANEL_CARD_CLASS, className)}>
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
@@ -519,7 +474,7 @@ export function LeaderboardPanel() {
           </Alert>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-3 lg:pe-1">
+        <div className="grid gap-8 lg:grid-cols-3 lg:pe-1 [&>div]:min-w-0">
           <UserLeaderList
             title="Messages"
             icon={MessageSquare}
